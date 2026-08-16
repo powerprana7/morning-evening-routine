@@ -47,8 +47,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key>               <string>routine</string>
-  <key>CFBundleDisplayName</key>        <string>routine</string>
+  <key>CFBundleName</key>               <string>Routine</string>
+  <key>CFBundleDisplayName</key>        <string>Routine</string>
   <key>CFBundleExecutable</key>         <string>$NAME</string>
   <key>CFBundleIdentifier</key>         <string>com.powerprana7.routine</string>
   <key>CFBundleIconFile</key>           <string>$NAME</string>

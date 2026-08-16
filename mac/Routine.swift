@@ -32,7 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 840),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.title = "routine"
+        window.title = "Routine"
         window.backgroundColor = paper
         window.contentView = web
         window.setFrameAutosaveName("RoutineMainWindow")   // 창 위치·크기를 기억한다
@@ -77,11 +77,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "routine 정보", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Routine 정보", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "가리기", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "routine 종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Routine 종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
 
