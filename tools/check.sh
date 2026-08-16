@@ -19,7 +19,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$HERE/app/routine.html"
+APP="$HERE/index.html"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

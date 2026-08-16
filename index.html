@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>루틴</title>
+
+<!-- 홈 화면에 추가했을 때 앱처럼 뜨게 하는 부분.
+     file:// 로 열면 매니페스트·서비스워커는 조용히 무시된다 -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#fdfaf3">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
 /* ═══════════════════════════════════════════════════════════════════
    루틴 실행기 — 단일 파일. 외부 의존성 없음 (D-002)
@@ -891,6 +899,13 @@ document.addEventListener('keydown', (e) => {
 pickMode(new Date().getHours() < 12 ? 'morning' : 'evening');
 paintSoundBtn();
 $('ver').textContent = VERSION;
+
+// 오프라인 실행 (https 에서만 동작한다. file:// 에서는 조용히 넘어간다)
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
