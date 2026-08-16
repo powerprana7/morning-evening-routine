@@ -13,7 +13,7 @@ import WebKit
 
 let remoteURL = URL(string: "https://powerprana7.github.io/morning-evening-routine/")!
 let allowedHost = "powerprana7.github.io"
-let projectPath = NSString(string: "~/projects/루틴 실행기 제작").expandingTildeInPath
+let projectPath = NSString(string: "~/Projects/루틴 실행기 제작").expandingTildeInPath
 let paper = NSColor(srgbRed: 0.992, green: 0.980, blue: 0.953, alpha: 1)   // #fdfaf3
 
 class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {

@@ -12,8 +12,8 @@
 
 ## 폴더 구조
 
-**프로젝트 위치**: `~/projects/루틴 실행기 제작`. 모든 프로젝트는 `~/projects/` 아래에 둔다
-(**전부 소문자**. macOS 는 대소문자를 안 가려 `~/Projects` 로도 열리지만, 같은 저장소를
+**프로젝트 위치**: `~/Projects/루틴 실행기 제작`. 모든 프로젝트는 `~/Projects/` 아래에 둔다
+(**대문자 `P`**. macOS 는 대소문자를 안 가려 `~/projects` 로도 열리지만, 같은 저장소를
 두 이름으로 부르면 git 출력이 엇갈려 보인다).
 
 ```
@@ -95,7 +95,7 @@
 ## 빠른 참조
 
 ```bash
-PROJ=~/projects/"루틴 실행기 제작"
+PROJ=~/Projects/"루틴 실행기 제작"
 
 open "$PROJ/index.html"                       # 맥에서 실행 (기본 브라우저)
 open -a "Google Chrome" "$PROJ/index.html"    # 브라우저 지정해 실행
