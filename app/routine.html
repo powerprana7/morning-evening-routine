@@ -163,17 +163,44 @@ button {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--accent); font-size: .95em;
 }
-#editText {
-  flex: 1 1 auto; min-height: 0; width: 100%;
-  background: transparent; color: var(--fg);
-  border: 1px solid var(--line); border-radius: 14px;
-  padding: 16px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, "Menlo", monospace;
-  font-size: .92rem; line-height: 1.9;
-  resize: none; outline: none;
-  -webkit-appearance: none;
+/* 번호 칸 + 입력칸 + (숨은) 거울.
+   거울은 각 줄이 접혀서 실제로 몇 픽셀을 차지하는지 재는 용도다 —
+   이걸 안 하면 두 줄로 접히는 긴 항목에서 번호가 어긋난다. */
+.edit-body {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: stretch;
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  transition: border-color .15s ease;
 }
-#editText:focus { border-color: var(--accent); }
+.edit-body.focused { border-color: var(--accent); }
+
+.edit-gutter, #editText, .edit-mirror {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .92rem; line-height: 1.9;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+  padding-top: 14px; padding-bottom: 14px;
+}
+.edit-gutter {
+  flex: none; width: 3em; padding-right: 10px; padding-left: 6px;
+  text-align: right; color: var(--muted); opacity: .65;
+  border-right: 1px solid var(--line);
+  overflow: hidden; user-select: none; -webkit-user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.edit-gutter b { display: block; font-weight: inherit; }
+#editText {
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  background: transparent; color: var(--fg);
+  border: none; border-radius: 0;
+  padding-left: 12px; padding-right: 14px;
+  resize: none; outline: none; -webkit-appearance: none;
+}
+.edit-mirror {
+  position: absolute; top: 0; left: 0;
+  visibility: hidden; pointer-events: none;
+  padding-left: 12px; padding-right: 14px;
+  box-sizing: border-box;
+}
 .edit-status { flex: none; color: var(--muted); font-size: .8rem; text-align: center; min-height: 1.2em; }
 .edit-status.warn { color: var(--accent); font-weight: 600; }
 .edit-actions { flex: none; display: flex; gap: 10px; align-items: center; }
@@ -220,8 +247,12 @@ button {
       전체 선택해 복사하면 내보내기, 붙여넣으면 불러오기다.
     </div>
 
-    <textarea id="editText" spellcheck="false" autocapitalize="off"
-              autocorrect="off" autocomplete="off"></textarea>
+    <div class="edit-body" id="editBody">
+      <div class="edit-gutter" id="editGutter" aria-hidden="true"></div>
+      <textarea id="editText" spellcheck="false" autocapitalize="off"
+                autocorrect="off" autocomplete="off"></textarea>
+      <div class="edit-mirror" id="editMirror" aria-hidden="true"></div>
+    </div>
 
     <div class="edit-status" id="editStatus"></div>
 
@@ -715,6 +746,8 @@ function paintEditor() {
     b.setAttribute('aria-selected', String(b.dataset.mode === editor.mode));
   });
   paintEditStatus();
+  // 화면에 붙은 뒤라야 폭이 잡혀 높이를 잴 수 있다
+  requestAnimationFrame(paintGutter);
 }
 
 function paintEditStatus() {
@@ -728,6 +761,39 @@ function paintEditStatus() {
 }
 
 function stashEditor() { editor.draft[editor.mode] = $('editText').value; }
+
+/* 번호 칸 그리기.
+   줄마다 번호를 하나씩 붙이되, 긴 항목이 두 줄로 접히면 번호 칸의 그 칸도
+   같은 높이여야 어긋나지 않는다. 그래서 숨은 거울에 같은 글자를 같은 폭으로
+   넣어 실제 높이를 재고, 그 높이를 번호 칸에 그대로 준다. */
+function paintGutter() {
+  const ta = $('editText');
+  const gutter = $('editGutter');
+  const mirror = $('editMirror');
+
+  const lines = ta.value.split('\n');
+  mirror.style.width = ta.clientWidth + 'px';
+
+  // 거울에 줄들을 채워 높이를 잰다 (빈 줄은 폭 없는 공백으로 높이를 확보)
+  mirror.textContent = '';
+  const probes = lines.map((line) => {
+    const d = document.createElement('div');
+    d.textContent = line === '' ? '​' : line;
+    mirror.append(d);
+    return d;
+  });
+  const heights = probes.map((d) => d.offsetHeight);
+
+  gutter.textContent = '';
+  lines.forEach((_, i) => {
+    const b = document.createElement('b');
+    b.textContent = String(i + 1);
+    b.style.height = heights[i] + 'px';
+    gutter.append(b);
+  });
+
+  gutter.scrollTop = ta.scrollTop;
+}
 
 function saveEditor() {
   stashEditor();
@@ -767,7 +833,15 @@ $('editModePick').addEventListener('click', (e) => {
   paintEditor();
 });
 
-$('editText').addEventListener('input', () => { stashEditor(); paintEditStatus(); });
+$('editText').addEventListener('input', () => {
+  stashEditor(); paintEditStatus(); paintGutter();
+});
+$('editText').addEventListener('scroll', () => {
+  $('editGutter').scrollTop = $('editText').scrollTop;
+});
+$('editText').addEventListener('focus', () => $('editBody').classList.add('focused'));
+$('editText').addEventListener('blur',  () => $('editBody').classList.remove('focused'));
+window.addEventListener('resize', () => { if (state.screen === 'edit') paintGutter(); });
 $('btnEditSave').addEventListener('click', saveEditor);
 $('btnEditCancel').addEventListener('click', () => {
   show('start');
