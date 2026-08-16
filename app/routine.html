@@ -178,7 +178,6 @@ button {
 .edit-status.warn { color: var(--accent); font-weight: 600; }
 .edit-actions { flex: none; display: flex; gap: 10px; align-items: center; }
 .edit-actions .primary { flex: 1; min-height: 58px; }
-.edit-foot { flex: none; display: flex; justify-content: center; }
 </style>
 </head>
 <body data-mode="morning">
@@ -229,9 +228,6 @@ button {
     <div class="edit-actions">
       <button class="primary" id="btnEditSave">저장</button>
       <button class="ghost" id="btnEditCancel">취소</button>
-    </div>
-    <div class="edit-foot">
-      <button class="ghost" id="btnEditReset">기본값으로 되돌리기</button>
     </div>
   </section>
 
@@ -383,10 +379,6 @@ function saveRoutines(data) {
   try { localStorage.setItem(KEY_CUSTOM, JSON.stringify(data)); return true; }
   catch (e) { return false; }
 }
-function clearRoutines() {
-  try { localStorage.removeItem(KEY_CUSTOM); } catch (e) {}
-}
-
 function loadSoundOn() {
   try { return localStorage.getItem(KEY_SOUND) !== 'off'; } catch (e) { return true; }
 }
@@ -711,7 +703,6 @@ function openEditor() {
   editor.mode = state.mode;
   editor.draft.morning = serializeItems(data.morning.items);
   editor.draft.evening = serializeItems(data.evening.items);
-  resetResetBtn();
   show('edit');
   paintEditor();
 }
@@ -763,13 +754,6 @@ function saveEditor() {
   pickMode(state.mode);
 }
 
-// 되돌리기는 두 번 눌러야 한다 — 브라우저 확인창을 쓰지 않기 위한 2단계
-let resetArmed = false;
-function resetResetBtn() {
-  resetArmed = false;
-  $('btnEditReset').textContent = '기본값으로 되돌리기';
-}
-
 /* ═══════════════════════════════════════════════════════════════════
    10. 입력
    ═══════════════════════════════════════════════════════════════════ */
@@ -780,7 +764,6 @@ $('editModePick').addEventListener('click', (e) => {
   if (!b) return;
   stashEditor();                 // 지금 보던 쪽의 수정분을 잃지 않는다
   editor.mode = b.dataset.mode;
-  resetResetBtn();
   paintEditor();
 });
 
@@ -789,18 +772,6 @@ $('btnEditSave').addEventListener('click', saveEditor);
 $('btnEditCancel').addEventListener('click', () => {
   show('start');
   pickMode(state.mode);          // 편집 전 상태로 화면을 되돌린다
-});
-$('btnEditReset').addEventListener('click', () => {
-  if (!resetArmed) {
-    resetArmed = true;
-    $('btnEditReset').textContent = '정말 되돌립니다 — 한 번 더';
-    return;
-  }
-  clearRoutines();
-  editor.draft.morning = serializeItems(ROUTINES.morning.items);
-  editor.draft.evening = serializeItems(ROUTINES.evening.items);
-  resetResetBtn();
-  paintEditor();
 });
 
 $('modePick').addEventListener('click', (e) => {
