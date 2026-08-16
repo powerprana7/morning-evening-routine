@@ -887,6 +887,17 @@ pickMode(new Date().getHours() < 12 ? 'morning' : 'evening');
 paintSoundBtn();
 $('ver').textContent = VERSION;
 
+/* 편집은 맥에서만 한다 (D-015). 터치 기기에서는 진입 버튼을 감춘다 —
+   안드로이드에서는 쓸 일이 없어 화면만 어지럽힌다.
+   정밀 포인터(마우스·트랙패드)가 있거나 화면이 넓으면 데스크톱으로 본다. */
+(function () {
+  let desktop = true;
+  try {
+    desktop = window.matchMedia('(pointer: fine)').matches || window.innerWidth >= 900;
+  } catch (e) { /* 판단이 안 되면 보여주는 쪽으로 (맥에서 못 쓰게 되는 것이 더 나쁘다) */ }
+  if (!desktop) $('btnEdit').style.display = 'none';
+})();
+
 // 오프라인 실행 (https 에서만 동작한다. file:// 에서는 조용히 넘어간다)
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => {
