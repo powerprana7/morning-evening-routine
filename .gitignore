@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# 편집기
+*.swp
+*~
+.idea/
+.vscode/
