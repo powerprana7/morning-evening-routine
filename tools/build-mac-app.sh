@@ -1,7 +1,7 @@
 #!/bin/bash
-# 맥앱 빌드 — mac/Routine.swift 를 루틴.app 으로 만든다 (D-016)
+# 맥앱 빌드 — mac/Routine.swift 를 routine.app 으로 만든다 (D-016)
 #
-#   tools/build-mac-app.sh            빌드만  (mac/루틴.app)
+#   tools/build-mac-app.sh            빌드만  (mac/routine.app)
 #   tools/build-mac-app.sh --install  빌드 + /Applications 에 설치
 #
 # 필요한 것: Xcode Command Line Tools (swiftc). Xcode 본체는 필요 없다.
@@ -10,7 +10,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$HERE/mac/Routine.swift"
-APP="$HERE/mac/루틴.app"
+APP="$HERE/mac/routine.app"
 NAME="Routine"
 
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
@@ -47,8 +47,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key>               <string>루틴</string>
-  <key>CFBundleDisplayName</key>        <string>루틴</string>
+  <key>CFBundleName</key>               <string>routine</string>
+  <key>CFBundleDisplayName</key>        <string>routine</string>
   <key>CFBundleExecutable</key>         <string>$NAME</string>
   <key>CFBundleIdentifier</key>         <string>com.powerprana7.routine</string>
   <key>CFBundleIconFile</key>           <string>$NAME</string>
@@ -66,12 +66,12 @@ touch "$APP"
 green "✓ 빌드 완료: $APP"
 
 if [ "${1:-}" = "--install" ]; then
-  DEST="/Applications/루틴.app"
+  DEST="/Applications/routine.app"
   if [ -w /Applications ]; then
     rm -rf "$DEST"; cp -R "$APP" "$DEST"
     green "✓ 설치 완료: $DEST"
   else
-    DEST="$HOME/Applications/루틴.app"
+    DEST="$HOME/Applications/routine.app"
     mkdir -p "$HOME/Applications"
     rm -rf "$DEST"; cp -R "$APP" "$DEST"
     green "✓ 설치 완료: $DEST  (/Applications 에 쓸 수 없어 사용자 폴더에 넣었습니다)"

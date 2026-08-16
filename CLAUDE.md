@@ -25,7 +25,12 @@
 ├── icon-192.png           홈 화면 아이콘
 ├── icon-512.png
 ├── .nojekyll              GitHub Pages 가 Jekyll 로 건드리지 않게
-├── tools/                 검사 스크립트
+├── mac/
+│   ├── Routine.swift      맥앱 소스 (WKWebView 로 배포 URL 을 띄운다)
+│   └── routine.app        빌드 산출물 — git 추적 안 함
+├── tools/
+│   ├── check.sh           회귀 검사
+│   └── build-mac-app.sh   맥앱 빌드 (--install 로 /Applications 에 설치)
 └── docs/
     ├── STATUS.md          ★ 지금 상태 — 세션을 시작하면 이것부터 읽는다
     ├── INDEX.md           문서 지도 (어떤 질문에 어떤 문서가 답하는지)
@@ -94,4 +99,5 @@ open "$PROJ/index.html"                       # 맥에서 실행 (기본 브라�
 open -a "Google Chrome" "$PROJ/index.html"    # 브라우저 지정해 실행
 grep -n "const VERSION" "$PROJ/index.html"    # 현재 버전 확인
 "$PROJ/tools/check.sh"                        # 회귀 검사
+"$PROJ/tools/build-mac-app.sh" --install      # 맥앱 빌드 + 설치
 ```
