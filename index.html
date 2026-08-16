@@ -898,10 +898,38 @@ $('ver').textContent = VERSION;
   if (!desktop) $('btnEdit').style.display = 'none';
 })();
 
-// 오프라인 실행 (https 에서만 동작한다. file:// 에서는 조용히 넘어간다)
+/* 오프라인 실행 + 자동 갱신 (https 에서만. file:// 에서는 조용히 넘어간다)
+ *
+ * 홈 화면에 설치한 PWA 는 주소창도 새로고침 버튼도 없어서, 앱 전환기에서 다시 열어도
+ * 기존 페이지가 이어질 뿐 새로 받아오지 않는다. 그러면 push 한 수정이 그 기기에
+ * 영영 안 온다 — 앱이 스스로 확인하게 만든다 (D-017). */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+
+  const refreshIfIdle = () => {
+    // 첫 설치 때는 새로고침하지 않는다 (제어권이 처음 생기는 것뿐이다)
+    if (!hadController || reloading) return;
+    // 루틴 진행 중이면 건드리지 않는다 — 진행이 날아간다 (D-008)
+    if (state.screen === 'run') return;
+    reloading = true;
+    location.reload();
+  };
+
+  navigator.serviceWorker.addEventListener('controllerchange', refreshIfIdle);
+
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js')
+      .then((reg) => { reg.update(); })
+      .catch(() => {});
+  });
+
+  // 앱으로 돌아올 때마다 새 버전이 있는지 확인한다
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    navigator.serviceWorker.getRegistration()
+      .then((reg) => { if (reg) reg.update(); })
+      .catch(() => {});
   });
 }
 </script>
