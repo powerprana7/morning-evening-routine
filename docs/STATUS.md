@@ -56,7 +56,8 @@ https://powerprana7.github.io/morning-evening-routine/ · `routine.app`
 
 ## 지금 진행 중
 
-없음.
+없음. **2026-08-17 로 이번 작업을 마감했다** — 앱은 배포돼 실사용 중이고,
+다음 세션은 아래 "다음에 할 일"에서 새로 시작하면 된다.
 
 ## 다음에 할 일 — 상위 3개
 
