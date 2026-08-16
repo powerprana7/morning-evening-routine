@@ -26,13 +26,18 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -o "$APP/Contents/MacOS/$NAME" "$SRC" \
   -framework Cocoa -framework WebKit -target arm64-apple-macos13.0
 
-# ── 2. 아이콘 (icon-512.png → .icns) ─────────────────────────────────
+# ── 2. 아이콘 ────────────────────────────────────────────────────────
+# 맥 전용 아이콘을 쓴다 — 1024 캔버스 안에 824 둥근 사각형 + 투명 여백.
+# 웹용(icon-512.png)은 꽉 차 있어서 맥에서는 다른 앱보다 커 보인다 (D-019)
+MASTER="$HERE/mac/icon-mac-1024.png"
+[ -f "$MASTER" ] || python3 "$HERE/tools/make-icons.py" >/dev/null
+
 ICONSET="$(mktemp -d)/icon.iconset"
 mkdir -p "$ICONSET"
-for s in 16 32 64 128 256 512; do
-  sips -z $s $s "$HERE/icon-512.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1
+for s in 16 32 128 256 512; do
+  sips -z $s $s "$MASTER" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1
   d=$((s*2))
-  sips -z $d $d "$HERE/icon-512.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null 2>&1
+  sips -z $d $d "$MASTER" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null 2>&1
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/$NAME.icns"
 rm -rf "$(dirname "$ICONSET")"
@@ -58,6 +63,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key>     <string>13.0</string>
   <key>NSHighResolutionCapable</key>    <true/>
   <key>NSHumanReadableCopyright</key>   <string></string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>루틴 변경을 클로드코드로 보내기 위해 터미널을 실행합니다.</string>
 </dict>
 </plist>
 PLIST

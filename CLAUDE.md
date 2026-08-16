@@ -22,14 +22,16 @@
 ├── index.html             ★ 본체. 이 파일 하나가 앱 전부다
 ├── manifest.webmanifest   홈 화면에 추가했을 때 앱처럼 뜨게 하는 설정
 ├── sw.js                  오프라인 실행 (서비스 워커)
-├── icon-192.png           홈 화면 아이콘
+├── icon-192.png           홈 화면 아이콘 (웹·안드로이드용, 꽉 채움)
 ├── icon-512.png
 ├── .nojekyll              GitHub Pages 가 Jekyll 로 건드리지 않게
 ├── mac/
-│   ├── Routine.swift      맥앱 소스 (WKWebView 로 배포 URL 을 띄운다)
+│   ├── Routine.swift      맥앱 소스 (WKWebView + 클로드코드 다리)
+│   ├── icon-mac-1024.png  맥 전용 아이콘 (여백 + 둥근 모서리 — D-019)
 │   └── routine.app        빌드 산출물 — git 추적 안 함
 ├── tools/
 │   ├── check.sh           회귀 검사
+│   ├── make-icons.py      아이콘 생성 (웹용 + 맥용)
 │   └── build-mac-app.sh   맥앱 빌드 (--install 로 /Applications 에 설치)
 └── docs/
     ├── STATUS.md          ★ 지금 상태 — 세션을 시작하면 이것부터 읽는다

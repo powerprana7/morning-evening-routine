@@ -12,9 +12,11 @@ import Cocoa
 import WebKit
 
 let remoteURL = URL(string: "https://powerprana7.github.io/morning-evening-routine/")!
+let allowedHost = "powerprana7.github.io"
+let projectPath = NSString(string: "~/projects/루틴 실행기 제작").expandingTildeInPath
 let paper = NSColor(srgbRed: 0.992, green: 0.980, blue: 0.953, alpha: 1)   // #fdfaf3
 
-class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var web: WKWebView!
     var usingFallback = false
@@ -23,6 +25,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         let cfg = WKWebViewConfiguration()
         // 완료음이 사용자 조작 없이도 울릴 수 있게 (앱 안에서는 자동재생 제한이 불필요)
         cfg.mediaTypesRequiringUserActionForPlayback = []
+
+        // JS → Swift 다리. 편집 화면의 버튼이 이걸 통해 클로드코드를 띄운다 (D-020)
+        let ucc = WKUserContentController()
+        ucc.add(self, name: "claudeCode")
+        cfg.userContentController = ucc
 
         web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
@@ -66,6 +73,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     func webView(_ w: WKWebView, didFail nav: WKNavigation!, withError e: Error) { fallback() }
     func webView(_ w: WKWebView, didFailProvisionalNavigation nav: WKNavigation!,
                  withError e: Error) { fallback() }
+
+    // ── 클로드코드로 보내기 (D-020) ──────────────────────────────────
+    //
+    // 안전 설계: **프롬프트 문자열을 셸 명령에 끼워 넣지 않는다.**
+    //   임시 파일에 쓰고, 고정된 명령이 그 파일을 읽게 한다. 셸 명령에 들어가는 값은
+    //   우리가 만든 경로 두 개뿐이라 내용이 무엇이든 명령을 벗어날 수 없다.
+    //   게다가 우리 도메인(또는 동봉 사본)에서 온 메시지만 받는다.
+    func userContentController(_ ucc: WKUserContentController, didReceive msg: WKScriptMessage) {
+        guard msg.name == "claudeCode", let prompt = msg.body as? String, !prompt.isEmpty
+        else { return }
+        let ours = (web.url?.host == allowedHost) || (web.url?.isFileURL ?? false)
+        guard ours else { return }
+        sendToClaudeCode(prompt)
+    }
+
+    func sendToClaudeCode(_ prompt: String) {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("routine-prompt-\(Int(Date().timeIntervalSince1970)).txt")
+        guard (try? prompt.write(to: tmp, atomically: true, encoding: .utf8)) != nil else { return }
+
+        // claude 는 ~/.local/bin 에 있을 수 있다 — PATH 를 보강해 둔다
+        let shell = "cd '\(projectPath)' && PATH=\"$HOME/.local/bin:$PATH\" "
+                  + "claude \"$(cat '\(tmp.path)')\""
+        let escaped = shell
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let source = "tell application \"Terminal\"\nactivate\ndo script \"\(escaped)\"\nend tell"
+
+        var err: NSDictionary?
+        NSAppleScript(source: source)?.executeAndReturnError(&err)
+        if let err = err { NSLog("클로드코드 실행 실패: \(err)") }
+    }
 
     // 창을 닫으면 앱도 끝난다 (독에 남아 있을 이유가 없다)
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }

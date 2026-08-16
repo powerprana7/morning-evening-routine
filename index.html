@@ -253,8 +253,8 @@ button {
       <code>오일풀링 @10</code> → 10분에 알림 &nbsp;·&nbsp;
       <code>제자리뛰기 100회 | 가자미근</code> → <code>|</code> 뒤는 작은 설명<br>
       <strong>여기서 고친 것은 이 기기에 저장되지 않는다.</strong>
-      <code>전체 복사</code>는 <strong>클로드코드용 지시문까지 함께</strong> 복사한다 —
-      그대로 붙여넣으면 반영되고 전 기기에 배포된다.
+      버튼을 누르면 <strong>클로드코드용 지시문까지 함께</strong> 만들어진다.
+      맥앱에서는 터미널이 열리며 바로 전달되고, 브라우저에서는 복사만 된다.
     </div>
 
     <div class="edit-body" id="editBody">
@@ -830,14 +830,31 @@ function buildPrompt() {
   ].join('\n');
 }
 
+/* 맥앱 안에서 실행 중인가 — 그렇다면 클로드코드를 바로 띄울 수 있다 (D-020) */
+const inMacApp = !!(window.webkit && window.webkit.messageHandlers
+                    && window.webkit.messageHandlers.claudeCode);
+
 /* 지금 보고 있는 쪽을 지시문과 함께 클립보드로. 저장은 하지 않는다 (D-015) —
-   이 화면은 "고쳐서 복사해 가는 곳"이지 이 기기에 남기는 곳이 아니다. */
+   이 화면은 "고쳐서 복사해 가는 곳"이지 이 기기에 남기는 곳이 아니다.
+   맥앱 안에서는 복사에 더해 클로드코드까지 띄운다. */
 function copyEditor() {
   stashEditor();
   const el = $('editStatus');
   const n = parseItems(editor.draft[editor.mode]).length;
+  const prompt = buildPrompt();
 
-  toClipboard(buildPrompt()).then(() => {
+  if (inMacApp) {
+    // 클립보드에도 넣어 둔다 — 터미널이 안 뜨면 손으로 붙여넣을 수 있게
+    toClipboard(prompt).catch(() => {});
+    try { window.webkit.messageHandlers.claudeCode.postMessage(prompt); } catch (e) {}
+    el.classList.remove('warn');
+    el.textContent = '클로드코드로 보냈습니다 (' + n + '개) — 터미널을 확인하세요';
+    ping();
+    setTimeout(paintEditStatus, 3200);
+    return;
+  }
+
+  toClipboard(prompt).then(() => {
     el.classList.remove('warn');
     el.textContent = '복사했습니다 (' + n + '개 + 지시문) — 클로드코드에 그대로 붙여넣으세요';
     ping();
@@ -874,6 +891,7 @@ $('editText').addEventListener('focus', () => $('editBody').classList.add('focus
 $('editText').addEventListener('blur',  () => $('editBody').classList.remove('focused'));
 window.addEventListener('resize', () => { if (state.screen === 'edit') paintGutter(); });
 $('btnEditCopy').addEventListener('click', copyEditor);
+if (inMacApp) $('btnEditCopy').textContent = '클로드코드로 보내기';
 $('btnEditCancel').addEventListener('click', () => {
   show('start');
   pickMode(state.mode);
