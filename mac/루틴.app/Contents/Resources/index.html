@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>루틴</title>
+
+<!-- 홈 화면에 추가했을 때 앱처럼 뜨게 하는 부분.
+     file:// 로 열면 매니페스트·서비스워커는 조용히 무시된다 -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#fdfaf3">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   루틴 실행기 — 단일 파일. 외부 의존성 없음 (D-002)
+   ═══════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #fdfaf3;  --fg: #23211c;  --muted: #8d8578;  --line: #e6e0d3;
+  --accent: #c2703a;  --btn-bg: #23211c;  --btn-fg: #fdfaf3;
+  --pad: clamp(20px, 5vw, 48px);
+}
+body[data-mode="evening"] {
+  --bg: #0d1015;  --fg: #e7e9ed;  --muted: #6d7783;  --line: #1e242c;
+  --accent: #7fa8cc;  --btn-bg: #e7e9ed;  --btn-fg: #0d1015;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+               "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background .4s ease, color .4s ease;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#app {
+  /* min-height 만 주면 flex 자식이 화면 밖으로 자란다 — 높이를 확정해야
+     .summary 의 내부 스크롤이 생긴다 */
+  height: 100vh;
+  height: 100dvh;
+  padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad)
+           calc(var(--pad) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 화면 전환 ─────────────────────────────────────────────────── */
+/* min-height:0 이 없으면 flex 자식의 기본값(auto) 때문에 내용만큼 늘어나
+   내부 스크롤이 만들어지지 않는다 */
+.screen { display: none; flex: 1; flex-direction: column; min-height: 0; }
+.screen.active { display: flex; }
+
+/* ── 공통 버튼 ─────────────────────────────────────────────────── */
+button {
+  font: inherit; color: inherit; background: none; border: none;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+.primary {
+  width: 100%; max-width: 560px; margin: 0 auto;
+  min-height: 68px; padding: 20px 24px;
+  background: var(--btn-bg); color: var(--btn-fg);
+  border-radius: 18px;
+  font-size: clamp(1.05rem, 3.6vw, 1.3rem); font-weight: 650;
+  letter-spacing: -.01em;
+  transition: transform .12s ease, opacity .12s ease;
+}
+.primary:active { transform: scale(.975); opacity: .9; }
+.ghost {
+  color: var(--muted); font-size: .88rem; padding: 12px 16px;
+  border-radius: 10px; min-height: 44px;
+}
+.ghost:active { opacity: .55; }
+
+/* ── 시작 화면 ─────────────────────────────────────────────────── */
+#screen-start { justify-content: center; align-items: center; text-align: center; gap: 40px; }
+.mode-pick { display: flex; gap: 10px; padding: 6px; border: 1px solid var(--line); border-radius: 999px; }
+.mode-pick button {
+  padding: 12px 28px; border-radius: 999px; font-size: 1rem;
+  font-weight: 600; color: var(--muted); min-height: 48px;
+}
+.mode-pick button[aria-selected="true"] { background: var(--btn-bg); color: var(--btn-fg); }
+.start-title { font-size: clamp(2rem, 9vw, 3.2rem); font-weight: 750; letter-spacing: -.03em; }
+.start-sub { color: var(--muted); font-size: .95rem; margin-top: 10px; }
+.start-actions { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+.footnote {
+  position: fixed; right: 14px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  color: var(--muted); font-size: .68rem; opacity: .55; letter-spacing: .02em;
+}
+
+/* ── 항목 화면 ─────────────────────────────────────────────────── */
+#screen-run { justify-content: space-between; }
+
+.topbar { display: flex; flex-direction: column; gap: 12px; }
+.counter { display: flex; justify-content: space-between; align-items: baseline;
+           color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.bar { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent);
+           border-radius: 2px; transition: width .35s ease; }
+
+.card {
+  flex: 1; display: flex; flex-direction: column;
+  justify-content: center; align-items: center; text-align: center;
+  gap: 20px; padding: 24px 0;
+  min-height: 0; overflow-y: auto;   /* 긴 항목명이 작은 화면에서 잘리지 않게 */
+  transition: opacity .22s ease, transform .22s ease;
+}
+.card.leaving { opacity: 0; transform: translateY(-18px) scale(.97); }
+.card.entering { opacity: 0; transform: translateY(14px); }
+
+.item-name {
+  font-size: clamp(1.7rem, 6.4vw, 3.1rem);
+  font-weight: 700; line-height: 1.32; letter-spacing: -.025em;
+  max-width: 16ch; word-break: keep-all;
+}
+.item-note { color: var(--muted); font-size: clamp(.9rem, 3.4vw, 1.1rem); max-width: 26ch; word-break: keep-all; }
+.times { color: var(--muted); font-size: .84rem; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.times.reached { color: var(--accent); font-weight: 600; }
+
+.bottom { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.subactions { display: flex; gap: 4px; }
+
+/* ── 요약 화면 ─────────────────────────────────────────────────── */
+#screen-done { gap: 20px; }
+.done-head { text-align: center; padding-top: 12px; flex: none; }
+.done-title { font-size: clamp(1.6rem, 6vw, 2.4rem); font-weight: 750; letter-spacing: -.02em; }
+.done-total { color: var(--accent); font-size: clamp(2.4rem, 11vw, 3.6rem);
+              font-weight: 750; font-variant-numeric: tabular-nums; margin-top: 6px; }
+.done-note { color: var(--muted); font-size: .8rem; margin-top: 8px; }
+.summary {
+  flex: 1 1 auto; min-height: 0;          /* ← 이게 없으면 스크롤이 안 생긴다 */
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  max-width: 560px; width: 100%; margin: 0 auto;
+  border-top: 1px solid var(--line);
+  /* 마지막 줄이 '처음으로' 버튼에 가려지지 않도록 */
+  padding-bottom: 8px;
+  /* 위아래로 더 있다는 것을 보여주는 페이드 */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px,
+                              #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px,
+                              #000 calc(100% - 14px), transparent 100%);
+}
+#btnRestart { flex: none; margin-top: 4px; }
+.summary div {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 13px 4px; border-bottom: 1px solid var(--line); font-size: .95rem;
+}
+.summary div span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.summary div.skip { color: var(--muted); }
+.summary div.skip span:first-child { text-decoration: line-through; opacity: .65; }
+
+/* ── 편집 화면 ─────────────────────────────────────────────────── */
+#screen-edit { gap: 14px; max-width: 720px; width: 100%; margin: 0 auto; }
+.edit-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex: none; }
+.edit-title { font-size: 1.15rem; font-weight: 700; }
+.edit-hint {
+  flex: none; color: var(--muted); font-size: .76rem; line-height: 1.65;
+  border-left: 2px solid var(--line); padding-left: 12px;
+}
+.edit-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent); font-size: .95em;
+}
+/* 번호 칸 + 입력칸 + (숨은) 거울.
+   거울은 각 줄이 접혀서 실제로 몇 픽셀을 차지하는지 재는 용도다 —
+   이걸 안 하면 두 줄로 접히는 긴 항목에서 번호가 어긋난다. */
+.edit-body {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: stretch;
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  transition: border-color .15s ease;
+}
+.edit-body.focused { border-color: var(--accent); }
+
+.edit-gutter, #editText, .edit-mirror {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .92rem; line-height: 1.9;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+  padding-top: 14px; padding-bottom: 14px;
+}
+.edit-gutter {
+  flex: none; width: 3em; padding-right: 10px; padding-left: 6px;
+  text-align: right; color: var(--muted); opacity: .65;
+  border-right: 1px solid var(--line);
+  overflow: hidden; user-select: none; -webkit-user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.edit-gutter b { display: block; font-weight: inherit; }
+#editText {
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  background: transparent; color: var(--fg);
+  border: none; border-radius: 0;
+  padding-left: 12px; padding-right: 14px;
+  resize: none; outline: none; -webkit-appearance: none;
+}
+.edit-mirror {
+  position: absolute; top: 0; left: 0;
+  visibility: hidden; pointer-events: none;
+  padding-left: 12px; padding-right: 14px;
+  box-sizing: border-box;
+}
+.edit-status { flex: none; color: var(--muted); font-size: .8rem; text-align: center; min-height: 1.2em; }
+.edit-status.warn { color: var(--accent); font-weight: 600; }
+.edit-actions { flex: none; display: flex; gap: 10px; align-items: center; }
+.edit-actions .primary { flex: 1; min-height: 58px; }
+</style>
+</head>
+<body data-mode="morning">
+
+<div id="app">
+
+  <!-- ════ 시작 화면 ════ -->
+  <section id="screen-start" class="screen active">
+    <div class="mode-pick" id="modePick">
+      <button data-mode="morning" aria-selected="true">모닝</button>
+      <button data-mode="evening" aria-selected="false">이브닝</button>
+    </div>
+    <div>
+      <div class="start-title" id="startTitle">Morning Routine</div>
+      <div class="start-sub" id="startSub">26개 항목</div>
+    </div>
+    <div class="start-actions">
+      <button class="primary" id="btnStart">시작</button>
+      <div style="display:flex; gap:4px; justify-content:center;">
+        <button class="ghost" id="btnSound">🔔 소리 켬</button>
+        <button class="ghost" id="btnEdit">✎ 루틴 편집</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ 편집 화면 ════ -->
+  <section id="screen-edit" class="screen">
+    <div class="edit-head">
+      <div class="edit-title" id="editTitle">루틴 편집</div>
+      <div class="mode-pick" id="editModePick">
+        <button data-mode="morning" aria-selected="true">모닝</button>
+        <button data-mode="evening" aria-selected="false">이브닝</button>
+      </div>
+    </div>
+
+    <div class="edit-hint">
+      한 줄에 항목 하나. <strong>줄 순서가 곧 실행 순서</strong>다.<br>
+      <code>오일풀링 @10</code> → 10분에 알림 &nbsp;·&nbsp;
+      <code>제자리뛰기 100회 | 가자미근</code> → <code>|</code> 뒤는 작은 설명<br>
+      <strong>여기서 고친 것은 이 기기에 저장되지 않는다.</strong>
+      복사해서 원본에 반영해야 전 기기가 바뀐다.
+    </div>
+
+    <div class="edit-body" id="editBody">
+      <div class="edit-gutter" id="editGutter" aria-hidden="true"></div>
+      <textarea id="editText" spellcheck="false" autocapitalize="off"
+                autocorrect="off" autocomplete="off"></textarea>
+      <div class="edit-mirror" id="editMirror" aria-hidden="true"></div>
+    </div>
+
+    <div class="edit-status" id="editStatus"></div>
+
+    <div class="edit-actions">
+      <button class="primary" id="btnEditCopy">전체 복사</button>
+      <button class="ghost" id="btnEditCancel">닫기</button>
+    </div>
+  </section>
+
+  <!-- ════ 항목 화면 ════ -->
+  <section id="screen-run" class="screen">
+    <div class="topbar">
+      <div class="counter">
+        <span id="cnt">1 / 26</span>
+        <span id="modeLabel">Morning</span>
+      </div>
+      <div class="bar"><i id="barFill"></i></div>
+    </div>
+
+    <div class="card" id="card">
+      <div class="item-name" id="itemName"></div>
+      <div class="item-note" id="itemNote"></div>
+      <div class="times" id="times"></div>
+    </div>
+
+    <div class="bottom">
+      <button class="primary" id="btnDone">완료</button>
+      <div class="subactions">
+        <button class="ghost" id="btnBack">← 이전</button>
+        <button class="ghost" id="btnSkip">건너뛰기 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ 요약 화면 ════ -->
+  <section id="screen-done" class="screen">
+    <div class="done-head">
+      <div class="done-title" id="doneTitle">루틴 완료</div>
+      <div class="done-total" id="doneTotal">0:00</div>
+      <div class="done-note">이 기록은 저장되지 않습니다</div>
+    </div>
+    <div class="summary" id="summary"></div>
+    <button class="primary" id="btnRestart">처음으로</button>
+  </section>
+
+  <div class="footnote" id="ver"></div>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════════
+   1. 버전 — 동작이 바뀌면 반드시 올린다 (CLAUDE.md 8번)
+   ═══════════════════════════════════════════════════════════════════ */
+const VERSION = '2026-08-17';
+
+/* ═══════════════════════════════════════════════════════════════════
+   2. 루틴 기본 목록 (D-006)
+      name    : 화면에 크게 뜨는 문구
+      note    : 아래 작게. 없으면 ''
+      minutes : 이 시간에 도달하면 알림이 울린다. null 이면 알림 없음.
+                (자동으로 넘어가지는 않는다 — D-004)
+
+      ⚠ 이브닝의 순서 주석
+        [번호] = 원본 Todoist 번호 그대로.
+        [배치] = 원본에 번호가 없어 임의로 배치한 항목. 확인 필요.
+   ═══════════════════════════════════════════════════════════════════ */
+const ROUTINES = {
+  morning: {
+    label: 'Morning Routine',
+    items: [
+      { name: 'Get up early',                    note: '', minutes: null },
+      { name: '기지개를 켠다',                    note: '', minutes: null },
+      { name: '허리운동 10회를 행한다',            note: '', minutes: null },
+      { name: '창문을 열고 환기를 시킨다',          note: '', minutes: null },
+      { name: 'Make bed',                        note: '', minutes: null },
+      { name: '천부경, 수진선학 훈',               note: '', minutes: null },
+      { name: '오일풀링',                        note: '', minutes: 10   },
+      { name: '제자리뛰기 100회',                 note: '가자미근', minutes: null },
+      { name: 'Brush teeth',                     note: '', minutes: null },
+      { name: 'Shower / 눈마사지',                note: '', minutes: null },
+      { name: 'Fatkiller for head and perineum', note: '', minutes: null },
+      { name: '머리를 잘 말리고 정돈한다',          note: '', minutes: null },
+      { name: '거울을 보고 긍정적인 느낌을 갖는다',  note: '', minutes: null },
+      { name: 'Reflenesh your nutrition',        note: '', minutes: null },
+      { name: '차를 내린다',                      note: '', minutes: null },
+      { name: '10x 이음네오',                     note: '', minutes: null },
+      { name: '3x Core goals',                   note: '', minutes: null },
+      { name: 'Put things in place',             note: '', minutes: null },
+      { name: '수련매트를 깔고 자리에 앉는다',       note: '', minutes: null },
+      { name: '간단하게 몸을 푼다',                note: '', minutes: null },
+      { name: '사랑해명상을 행한다',               note: '', minutes: null },
+      { name: '목표를 종이에 새긴다',              note: '', minutes: null },
+      { name: '오늘 반드시 완수해야 할 가장 가치있는 일은 무엇인가', note: '', minutes: null },
+      { name: '타임테이블에 그 일을 배치한다',       note: '', minutes: null },
+      { name: '타이머 세팅',                      note: '', minutes: null },
+      { name: 'Visualization',                   note: '', minutes: null },
+    ],
+  },
+  evening: {
+    label: 'Evening Routine',
+    items: [
+      { name: '입은 옷을 빨래통에 넣거나 옷걸이에 건다', note: '', minutes: null }, // [010]
+      { name: '창문을 열고 환기를 시킨다',              note: '', minutes: null }, // [020]
+      { name: 'Brush your teeth',                    note: '치간칫솔 / 치실질 / 워터픽스', minutes: null }, // [030]
+      { name: 'Shower',                              note: '눈마사지', minutes: null },   // [040]
+      { name: 'Fatkiller for stomach',               note: '', minutes: null }, // [배치]
+      { name: '페이스힐링 테크닉을 10회씩 10회 행한다',  note: '', minutes: null }, // [040]
+      { name: '얼굴에 마스크팩을 한다',                 note: '', minutes: null }, // [배치]
+      { name: '거울을 보고 긍정적인 느낌을 갖는다',      note: '', minutes: null }, // [050]
+      { name: '멘탈스마일',                           note: '', minutes: null }, // [배치]
+      { name: '코세척',                              note: '', minutes: null }, // [050]
+      { name: '미녹시딜을 도포한다',                   note: '', minutes: null }, // [060]
+      { name: '입술보습',                            note: '', minutes: null }, // [배치]
+      { name: 'Reflenesh your nutrition',            note: '', minutes: null }, // [070]
+      { name: '달맞이꽃종자유',                       note: '', minutes: null }, // [080]
+      { name: '하루 중 마실 물을 만들고 공명시킨다',     note: '', minutes: null }, // [배치]
+      { name: '가습기를 켠다',                        note: '', minutes: null }, // [090]
+      { name: '10x 이음네오',                        note: '', minutes: null }, // [100]
+      { name: '3x Core goals',                       note: '', minutes: null }, // [110]
+      { name: 'Put things in place',                 note: '', minutes: null }, // [배치]
+      { name: '수련매트를 깔고 자리에 앉는다',          note: '', minutes: null }, // [배치]
+      { name: '간단하게 몸을 푼다',                    note: '', minutes: null }, // [배치]
+      { name: '사랑해명상을 행한다',                   note: '', minutes: null }, // [배치]
+      { name: '타임테이블을 보고 복기한다',             note: '', minutes: null }, // [배치]
+      { name: 'Make an Aciton List on the next day',  note: '', minutes: null }, // [배치]
+      { name: '시각화 동영상을 시청한다',               note: '', minutes: null }, // [배치]
+      { name: 'Visualization',                       note: '', minutes: null }, // [배치]
+      { name: '다음 날 하루를 이미지트레이닝 한다',      note: '', minutes: null }, // [배치]
+      { name: 'Turn off electronics',                note: '', minutes: null }, // [배치]
+    ],
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   3. 저장 — 소리 설정 하나뿐 (D-015)
+      루틴은 저장하지 않는다. 이 파일이 유일한 원본이고, 기기가 자기 사본을
+      들고 있으면 push 한 수정을 영영 못 받기 때문이다.
+      진행 상태도 저장하지 않는다 (D-008).
+   ═══════════════════════════════════════════════════════════════════ */
+const KEY_SOUND = 'routine.sound.v1';
+
+function loadSoundOn() {
+  try { return localStorage.getItem(KEY_SOUND) !== 'off'; } catch (e) { return true; }
+}
+function saveSoundOn(on) {
+  try { localStorage.setItem(KEY_SOUND, on ? 'on' : 'off'); } catch (e) {}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   3.5 텍스트 ↔ 목록 변환 (D-013)
+       한 줄에 항목 하나. 줄 순서가 곧 실행 순서.
+         이름                      → 그냥 항목
+         이름 | 설명               → | 뒤는 작은 보조 설명
+         이름 @10                  → 10분에 알림 (줄 맨 끝)
+         이름 | 설명 @10           → 둘 다
+         # 로 시작하는 줄, 빈 줄   → 무시
+       이 형식이 곧 내보내기·불러오기 형식이다 (D-007 을 이 안으로 흡수).
+   ═══════════════════════════════════════════════════════════════════ */
+function parseItems(text) {
+  const out = [];
+  String(text).split('\n').forEach((raw) => {
+    let line = raw.trim();
+    if (!line || line.startsWith('#')) return;
+
+    // ① 줄 맨 끝의 @숫자 를 먼저 떼어낸다
+    let minutes = null;
+    const mm = line.match(/\s@(\d{1,3})$/);
+    if (mm) {
+      minutes = parseInt(mm[1], 10) || null;
+      line = line.slice(0, mm.index).trim();
+    }
+
+    // ② 첫 번째 | 로 이름과 설명을 가른다
+    let name = line, note = '';
+    const bar = line.indexOf('|');
+    if (bar !== -1) {
+      name = line.slice(0, bar).trim();
+      note = line.slice(bar + 1).trim();
+    }
+
+    if (name) out.push({ name: name, note: note, minutes: minutes });
+  });
+  return out;
+}
+
+function serializeItems(items) {
+  return items.map((it) => {
+    let s = it.name;
+    if (it.note) s += ' | ' + it.note;
+    if (it.minutes) s += ' @' + it.minutes;
+    return s;
+  }).join('\n');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   4. 소리와 진동 (D-003)
+      오디오 파일 없이 WebAudio 로 합성한다. 소리는 보조 신호이므로
+      실패해도 앱 흐름에 영향을 주지 않게 전부 감싸 둔다.
+   ═══════════════════════════════════════════════════════════════════ */
+let audioCtx = null;
+
+function wakeAudio() {
+  // 첫 사용자 조작에서 호출. 브라우저 자동재생 정책 때문에 필요하다.
+  try {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { audioCtx = null; }
+}
+
+function tone(freq, startAt, dur, peak) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, startAt);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(peak, startAt + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + dur + 0.05);
+}
+
+// 완료: 맑은 "띵" — 5도 두 음을 겹쳐 종소리처럼
+function ping() {
+  if (!state.soundOn) return;
+  try {
+    wakeAudio();
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    tone(880,  t, 0.9, 0.22);
+    tone(1320, t + 0.008, 0.7, 0.10);
+  } catch (e) {}
+}
+
+// 지정 시간 도달: 두 번 울려 완료음과 구분한다
+function chime() {
+  if (!state.soundOn) return;
+  try {
+    wakeAudio();
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    tone(1046, t,        0.5, 0.20);
+    tone(1046, t + 0.28, 0.7, 0.20);
+  } catch (e) {}
+}
+
+function buzz(pattern) {
+  try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   5. 화면 꺼짐 방지 — 지원하지 않으면 조용히 무시
+   ═══════════════════════════════════════════════════════════════════ */
+let wakeLock = null;
+
+async function keepAwake() {
+  try {
+    if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) { wakeLock = null; }
+}
+function releaseAwake() {
+  try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  // 탭에서 벗어났다 돌아오면 잠금이 풀려 있다. 실행 중이면 다시 건다.
+  if (document.visibilityState === 'visible' && state.screen === 'run') keepAwake();
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   6. 시간 — setInterval 로 누적하지 않고 항상 Date.now() 차이로 (D-004)
+   ═══════════════════════════════════════════════════════════════════ */
+function fmt(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   7. 상태
+   ═══════════════════════════════════════════════════════════════════ */
+const state = {
+  screen: 'start',
+  mode: 'morning',
+  items: [],
+  idx: 0,
+  runStart: 0,     // 루틴 전체 시작 시각
+  itemStart: 0,    // 현재 항목 시작 시각
+  chimed: false,   // 현재 항목의 지정 시간 알림을 울렸는가
+  records: [],     // { name, ms, skipped }
+  soundOn: loadSoundOn(),
+  ticker: null,
+};
+
+const $ = (id) => document.getElementById(id);
+
+/* ═══════════════════════════════════════════════════════════════════
+   8. 화면 전환
+   ═══════════════════════════════════════════════════════════════════ */
+function show(name) {
+  state.screen = name;
+  ['start', 'run', 'done', 'edit'].forEach((s) => {
+    $('screen-' + s).classList.toggle('active', s === name);
+  });
+  $('ver').style.display = (name === 'run' || name === 'edit') ? 'none' : '';
+}
+
+function pickMode(mode) {
+  state.mode = mode;
+  document.body.dataset.mode = mode;
+  const data = ROUTINES[mode];
+  $('startTitle').textContent = data.label;
+  $('startSub').textContent = data.items.length + '개 항목';
+  $('modeLabel').textContent = mode === 'morning' ? 'Morning' : 'Evening';
+  [...$('modePick').children].forEach((b) => {
+    b.setAttribute('aria-selected', String(b.dataset.mode === mode));
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   9. 실행
+   ═══════════════════════════════════════════════════════════════════ */
+function start() {
+  wakeAudio();                      // 첫 조작에서 오디오를 깨워 둔다
+  state.items = ROUTINES[state.mode].items;
+  state.idx = 0;
+  state.records = [];
+  state.runStart = Date.now();
+  show('run');
+  keepAwake();
+  render(false);
+  if (!state.ticker) state.ticker = setInterval(tick, 250);
+}
+
+function render(animate) {
+  const item = state.items[state.idx];
+  if (!item) return finish();
+
+  state.itemStart = Date.now();
+  state.chimed = false;
+
+  const paint = () => {
+    $('itemName').textContent = item.name;
+    $('itemNote').textContent = item.note || '';
+    $('itemNote').style.display = item.note ? '' : 'none';
+    $('cnt').textContent = (state.idx + 1) + ' / ' + state.items.length;
+    $('barFill').style.width = (state.idx / state.items.length * 100) + '%';
+    $('times').classList.remove('reached');
+    tick();
+  };
+
+  if (!animate) { paint(); return; }
+
+  const card = $('card');
+  card.classList.add('leaving');
+  setTimeout(() => {
+    paint();
+    // 시간 계산은 화면이 실제로 바뀐 시점부터 — 전환 애니메이션을 항목
+    // 소요시간에 넣지 않는다
+    state.itemStart = Date.now();
+    card.classList.remove('leaving');
+    card.classList.add('entering');
+    requestAnimationFrame(() => requestAnimationFrame(() => card.classList.remove('entering')));
+  }, 220);
+}
+
+function tick() {
+  if (state.screen !== 'run') return;
+  const item = state.items[state.idx];
+  if (!item) return;
+
+  const now = Date.now();
+  const itemMs = now - state.itemStart;
+  let text = '이 항목 ' + fmt(itemMs) + '  ·  전체 ' + fmt(now - state.runStart);
+
+  if (item.minutes) {
+    const goal = item.minutes * 60000;
+    if (itemMs >= goal) {
+      text += '  ·  ' + item.minutes + '분 지남';
+      if (!state.chimed) {
+        state.chimed = true;
+        $('times').classList.add('reached');
+        chime();
+        buzz([40, 70, 40]);
+      }
+    } else {
+      text += '  ·  목표 ' + item.minutes + '분';
+    }
+  }
+  $('times').textContent = text;
+}
+
+function advance(skipped) {
+  const item = state.items[state.idx];
+  if (!item) return;
+
+  state.records.push({
+    name: item.name,
+    ms: skipped ? null : Date.now() - state.itemStart,
+    skipped: skipped,
+  });
+
+  if (skipped) {
+    buzz(20);
+  } else {
+    ping();
+    buzz(30);
+  }
+
+  state.idx++;
+  if (state.idx >= state.items.length) return finish();
+  render(true);
+}
+
+function back() {
+  if (state.idx === 0) return;
+  state.idx--;
+  state.records.pop();
+  render(true);   // 되돌아간 항목의 시간은 0부터 다시 잰다
+}
+
+function finish() {
+  releaseAwake();
+  clearInterval(state.ticker);
+  state.ticker = null;
+
+  const totalMs = Date.now() - state.runStart;
+  $('doneTitle').textContent =
+    (state.mode === 'morning' ? 'Morning' : 'Evening') + ' Routine 완료';
+  $('doneTotal').textContent = fmt(totalMs);
+
+  const box = $('summary');
+  box.innerHTML = '';
+  state.records.forEach((r) => {
+    const row = document.createElement('div');
+    if (r.skipped) row.className = 'skip';
+    const a = document.createElement('span');
+    a.textContent = r.name;
+    const b = document.createElement('span');
+    b.textContent = r.skipped ? '건너뜀' : fmt(r.ms);
+    row.append(a, b);
+    box.append(row);
+  });
+
+  show('done');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   9.5 편집 화면 (D-013)
+       편집·순서변경·내보내기·불러오기가 전부 이 한 화면이다.
+   ═══════════════════════════════════════════════════════════════════ */
+const editor = { mode: 'morning', draft: { morning: '', evening: '' } };
+
+function openEditor() {
+  const data = ROUTINES;
+  editor.mode = state.mode;
+  editor.draft.morning = serializeItems(data.morning.items);
+  editor.draft.evening = serializeItems(data.evening.items);
+  show('edit');
+  paintEditor();
+}
+
+function paintEditor() {
+  document.body.dataset.mode = editor.mode;
+  $('editText').value = editor.draft[editor.mode];
+  $('editTitle').textContent = '루틴 텍스트';
+  [...$('editModePick').children].forEach((b) => {
+    b.setAttribute('aria-selected', String(b.dataset.mode === editor.mode));
+  });
+  paintEditStatus();
+  // 화면에 붙은 뒤라야 폭이 잡혀 높이를 잴 수 있다
+  requestAnimationFrame(paintGutter);
+}
+
+function paintEditStatus() {
+  const el = $('editStatus');
+  const m = parseItems(editor.draft.morning).length;
+  const e = parseItems(editor.draft.evening).length;
+  const cur = editor.mode === 'morning' ? m : e;
+  el.textContent = '모닝 ' + m + '개 · 이브닝 ' + e + '개';
+  el.classList.toggle('warn', cur === 0);
+  if (cur === 0) el.textContent += '  —  지금 보는 쪽이 비어 있습니다';
+}
+
+function stashEditor() { editor.draft[editor.mode] = $('editText').value; }
+
+/* 번호 칸 그리기.
+   줄마다 번호를 하나씩 붙이되, 긴 항목이 두 줄로 접히면 번호 칸의 그 칸도
+   같은 높이여야 어긋나지 않는다. 그래서 숨은 거울에 같은 글자를 같은 폭으로
+   넣어 실제 높이를 재고, 그 높이를 번호 칸에 그대로 준다. */
+function paintGutter() {
+  const ta = $('editText');
+  const gutter = $('editGutter');
+  const mirror = $('editMirror');
+
+  const lines = ta.value.split('\n');
+  mirror.style.width = ta.clientWidth + 'px';
+
+  // 거울에 줄들을 채워 높이를 잰다 (빈 줄은 폭 없는 공백으로 높이를 확보)
+  mirror.textContent = '';
+  const probes = lines.map((line) => {
+    const d = document.createElement('div');
+    d.textContent = line === '' ? '​' : line;
+    mirror.append(d);
+    return d;
+  });
+  const heights = probes.map((d) => d.offsetHeight);
+
+  gutter.textContent = '';
+  lines.forEach((_, i) => {
+    const b = document.createElement('b');
+    b.textContent = String(i + 1);
+    b.style.height = heights[i] + 'px';
+    gutter.append(b);
+  });
+
+  gutter.scrollTop = ta.scrollTop;
+}
+
+/* 지금 보고 있는 쪽의 텍스트를 클립보드로. 저장은 하지 않는다 (D-015) —
+   이 화면은 "고쳐서 복사해 가는 곳"이지 이 기기에 남기는 곳이 아니다. */
+function copyEditor() {
+  stashEditor();
+  const text = editor.draft[editor.mode];
+  const el = $('editStatus');
+  const done = () => {
+    el.classList.remove('warn');
+    el.textContent = '복사했습니다 — 붙여넣어 전달하면 전 기기에 반영됩니다';
+    ping();
+    setTimeout(paintEditStatus, 2600);
+  };
+  const fallback = () => {
+    // 클립보드 API 가 막힌 환경(구형·비 https)에서는 선택만 해준다
+    const ta = $('editText');
+    ta.focus(); ta.select();
+    el.classList.add('warn');
+    el.textContent = '전체 선택했습니다 — 직접 복사하세요 (⌘C)';
+    setTimeout(paintEditStatus, 2600);
+  };
+  try {
+    if (navigator.clipboard && location.protocol !== 'file:') {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+  } catch (e) { fallback(); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   10. 입력
+   ═══════════════════════════════════════════════════════════════════ */
+$('btnEdit').addEventListener('click', openEditor);
+
+$('editModePick').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  stashEditor();                 // 지금 보던 쪽의 수정분을 잃지 않는다
+  editor.mode = b.dataset.mode;
+  paintEditor();
+});
+
+$('editText').addEventListener('input', () => {
+  stashEditor(); paintEditStatus(); paintGutter();
+});
+$('editText').addEventListener('scroll', () => {
+  $('editGutter').scrollTop = $('editText').scrollTop;
+});
+$('editText').addEventListener('focus', () => $('editBody').classList.add('focused'));
+$('editText').addEventListener('blur',  () => $('editBody').classList.remove('focused'));
+window.addEventListener('resize', () => { if (state.screen === 'edit') paintGutter(); });
+$('btnEditCopy').addEventListener('click', copyEditor);
+$('btnEditCancel').addEventListener('click', () => {
+  show('start');
+  pickMode(state.mode);
+});
+
+$('modePick').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) pickMode(b.dataset.mode);
+});
+
+$('btnStart').addEventListener('click', start);
+$('btnDone').addEventListener('click', () => advance(false));
+$('btnSkip').addEventListener('click', () => advance(true));
+$('btnBack').addEventListener('click', back);
+
+$('btnRestart').addEventListener('click', () => {
+  show('start');
+  pickMode(state.mode);
+});
+
+$('btnSound').addEventListener('click', () => {
+  state.soundOn = !state.soundOn;
+  saveSoundOn(state.soundOn);
+  paintSoundBtn();
+  if (state.soundOn) ping();     // 켜는 순간 들려준다
+});
+function paintSoundBtn() {
+  $('btnSound').textContent = state.soundOn ? '🔔 소리 켬' : '🔕 소리 끔';
+}
+
+document.addEventListener('keydown', (e) => {
+  if (state.screen === 'start') {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start(); }
+    return;
+  }
+  if (state.screen !== 'run') return;
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advance(false); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); advance(true); }
+  else if (e.key === 'ArrowLeft')  { e.preventDefault(); back(); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   11. 시작
+   ═══════════════════════════════════════════════════════════════════ */
+// 정오를 경계로 모닝/이브닝을 골라 둔다. 어디까지나 제안이고 탭으로 바꾼다.
+pickMode(new Date().getHours() < 12 ? 'morning' : 'evening');
+paintSoundBtn();
+$('ver').textContent = VERSION;
+
+// 오프라인 실행 (https 에서만 동작한다. file:// 에서는 조용히 넘어간다)
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
