@@ -252,7 +252,8 @@ button {
       한 줄에 항목 하나. <strong>줄 순서가 곧 실행 순서</strong>다.<br>
       <code>오일풀링 @10</code> → 10분에 알림 &nbsp;·&nbsp;
       <code>제자리뛰기 100회 | 가자미근</code> → <code>|</code> 뒤는 작은 설명<br>
-      전체 선택해 복사하면 내보내기, 붙여넣으면 불러오기다.
+      <strong>여기서 고친 것은 이 기기에 저장되지 않는다.</strong>
+      복사해서 원본에 반영해야 전 기기가 바뀐다.
     </div>
 
     <div class="edit-body" id="editBody">
@@ -265,8 +266,8 @@ button {
     <div class="edit-status" id="editStatus"></div>
 
     <div class="edit-actions">
-      <button class="primary" id="btnEditSave">저장</button>
-      <button class="ghost" id="btnEditCancel">취소</button>
+      <button class="primary" id="btnEditCopy">전체 복사</button>
+      <button class="ghost" id="btnEditCancel">닫기</button>
     </div>
   </section>
 
@@ -396,28 +397,13 @@ const ROUTINES = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════
-   3. 저장 — 편집한 목록과 소리 설정 둘뿐 (D-005, D-008)
-      진행 상태는 저장하지 않는다.
+   3. 저장 — 소리 설정 하나뿐 (D-015)
+      루틴은 저장하지 않는다. 이 파일이 유일한 원본이고, 기기가 자기 사본을
+      들고 있으면 push 한 수정을 영영 못 받기 때문이다.
+      진행 상태도 저장하지 않는다 (D-008).
    ═══════════════════════════════════════════════════════════════════ */
-const KEY_CUSTOM = 'routine.custom.v1';
-const KEY_SOUND  = 'routine.sound.v1';
+const KEY_SOUND = 'routine.sound.v1';
 
-function loadRoutines() {
-  try {
-    const raw = localStorage.getItem(KEY_CUSTOM);
-    if (!raw) return ROUTINES;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.morning && parsed.evening) return parsed;
-  } catch (e) { /* 깨진 값이면 조용히 기본값 */ }
-  return ROUTINES;
-}
-function isCustom() {
-  try { return !!localStorage.getItem(KEY_CUSTOM); } catch (e) { return false; }
-}
-function saveRoutines(data) {
-  try { localStorage.setItem(KEY_CUSTOM, JSON.stringify(data)); return true; }
-  catch (e) { return false; }
-}
 function loadSoundOn() {
   try { return localStorage.getItem(KEY_SOUND) !== 'off'; } catch (e) { return true; }
 }
@@ -593,10 +579,9 @@ function show(name) {
 function pickMode(mode) {
   state.mode = mode;
   document.body.dataset.mode = mode;
-  const data = loadRoutines()[mode];
+  const data = ROUTINES[mode];
   $('startTitle').textContent = data.label;
-  $('startSub').textContent = data.items.length + '개 항목'
-    + (isCustom() ? ' · 편집본' : '');
+  $('startSub').textContent = data.items.length + '개 항목';
   $('modeLabel').textContent = mode === 'morning' ? 'Morning' : 'Evening';
   [...$('modePick').children].forEach((b) => {
     b.setAttribute('aria-selected', String(b.dataset.mode === mode));
@@ -608,7 +593,7 @@ function pickMode(mode) {
    ═══════════════════════════════════════════════════════════════════ */
 function start() {
   wakeAudio();                      // 첫 조작에서 오디오를 깨워 둔다
-  state.items = loadRoutines()[state.mode].items;
+  state.items = ROUTINES[state.mode].items;
   state.idx = 0;
   state.records = [];
   state.runStart = Date.now();
@@ -738,7 +723,7 @@ function finish() {
 const editor = { mode: 'morning', draft: { morning: '', evening: '' } };
 
 function openEditor() {
-  const data = loadRoutines();
+  const data = ROUTINES;
   editor.mode = state.mode;
   editor.draft.morning = serializeItems(data.morning.items);
   editor.draft.evening = serializeItems(data.evening.items);
@@ -749,7 +734,7 @@ function openEditor() {
 function paintEditor() {
   document.body.dataset.mode = editor.mode;
   $('editText').value = editor.draft[editor.mode];
-  $('editTitle').textContent = isCustom() ? '루틴 편집 (편집본)' : '루틴 편집 (기본값)';
+  $('editTitle').textContent = '루틴 텍스트';
   [...$('editModePick').children].forEach((b) => {
     b.setAttribute('aria-selected', String(b.dataset.mode === editor.mode));
   });
@@ -803,29 +788,31 @@ function paintGutter() {
   gutter.scrollTop = ta.scrollTop;
 }
 
-function saveEditor() {
+/* 지금 보고 있는 쪽의 텍스트를 클립보드로. 저장은 하지 않는다 (D-015) —
+   이 화면은 "고쳐서 복사해 가는 곳"이지 이 기기에 남기는 곳이 아니다. */
+function copyEditor() {
   stashEditor();
-  const morning = parseItems(editor.draft.morning);
-  const evening = parseItems(editor.draft.evening);
-  if (!morning.length || !evening.length) {
-    const el = $('editStatus');
+  const text = editor.draft[editor.mode];
+  const el = $('editStatus');
+  const done = () => {
+    el.classList.remove('warn');
+    el.textContent = '복사했습니다 — 붙여넣어 전달하면 전 기기에 반영됩니다';
+    ping();
+    setTimeout(paintEditStatus, 2600);
+  };
+  const fallback = () => {
+    // 클립보드 API 가 막힌 환경(구형·비 https)에서는 선택만 해준다
+    const ta = $('editText');
+    ta.focus(); ta.select();
     el.classList.add('warn');
-    el.textContent = '양쪽 모두 최소 한 개는 있어야 저장됩니다';
-    return;
-  }
-  const ok = saveRoutines({
-    morning: { label: ROUTINES.morning.label, items: morning },
-    evening: { label: ROUTINES.evening.label, items: evening },
-  });
-  if (!ok) {
-    const el = $('editStatus');
-    el.classList.add('warn');
-    el.textContent = '저장하지 못했습니다 (브라우저 저장소 접근 불가)';
-    return;
-  }
-  ping();
-  show('start');
-  pickMode(state.mode);
+    el.textContent = '전체 선택했습니다 — 직접 복사하세요 (⌘C)';
+    setTimeout(paintEditStatus, 2600);
+  };
+  try {
+    if (navigator.clipboard && location.protocol !== 'file:') {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+  } catch (e) { fallback(); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -850,10 +837,10 @@ $('editText').addEventListener('scroll', () => {
 $('editText').addEventListener('focus', () => $('editBody').classList.add('focused'));
 $('editText').addEventListener('blur',  () => $('editBody').classList.remove('focused'));
 window.addEventListener('resize', () => { if (state.screen === 'edit') paintGutter(); });
-$('btnEditSave').addEventListener('click', saveEditor);
+$('btnEditCopy').addEventListener('click', copyEditor);
 $('btnEditCancel').addEventListener('click', () => {
   show('start');
-  pickMode(state.mode);          // 편집 전 상태로 화면을 되돌린다
+  pickMode(state.mode);
 });
 
 $('modePick').addEventListener('click', (e) => {
