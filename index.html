@@ -253,7 +253,8 @@ button {
       <code>오일풀링 @10</code> → 10분에 알림 &nbsp;·&nbsp;
       <code>제자리뛰기 100회 | 가자미근</code> → <code>|</code> 뒤는 작은 설명<br>
       <strong>여기서 고친 것은 이 기기에 저장되지 않는다.</strong>
-      복사해서 원본에 반영해야 전 기기가 바뀐다.
+      <code>전체 복사</code>는 <strong>클로드코드용 지시문까지 함께</strong> 복사한다 —
+      그대로 붙여넣으면 반영되고 전 기기에 배포된다.
     </div>
 
     <div class="edit-body" id="editBody">
@@ -788,31 +789,66 @@ function paintGutter() {
   gutter.scrollTop = ta.scrollTop;
 }
 
-/* 지금 보고 있는 쪽의 텍스트를 클립보드로. 저장은 하지 않는다 (D-015) —
+/* 클립보드에 넣기. 실패하면 숨은 textarea + execCommand 로 한 번 더 시도한다
+   (file:// 이나 구형 환경에서는 navigator.clipboard 가 막힌다) */
+function toClipboard(text) {
+  if (navigator.clipboard && location.protocol !== 'file:') {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    const tmp = document.createElement('textarea');
+    tmp.value = text;
+    tmp.setAttribute('readonly', '');
+    tmp.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+    document.body.append(tmp);
+    tmp.select();
+    tmp.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    tmp.remove();
+    ok ? resolve() : reject();
+  });
+}
+
+/* 클로드코드에 그대로 붙여넣을 수 있는 지시문까지 붙여서 만든다 (D-018).
+   개수를 함께 적어 두는 것이 중요하다 — 붙여넣다 줄이 잘리면 그것만이 단서다. */
+function buildPrompt() {
+  const key = editor.mode;                       // morning | evening
+  const label = key === 'morning' ? '모닝' : '이브닝';
+  const body = editor.draft[key].trim();
+  const count = parseItems(body).length;
+  return [
+    '~/projects/루틴 실행기 제작 의 index.html 에서 ROUTINES.' + key + ' 을',
+    '아래 목록으로 통째로 교체하고 push 해줘.',
+    '',
+    '형식: 한 줄에 항목 하나 · 줄 순서가 곧 실행 순서 · "|" 뒤는 보조 설명 · "@숫자"는 분 알림',
+    '아래는 ' + label + ' 루틴 ' + count + '개다. 반영 전에 개수가 맞는지 확인해줘.',
+    '',
+    '--- ' + label + ' 루틴 시작 ---',
+    body,
+    '--- ' + label + ' 루틴 끝 ---',
+  ].join('\n');
+}
+
+/* 지금 보고 있는 쪽을 지시문과 함께 클립보드로. 저장은 하지 않는다 (D-015) —
    이 화면은 "고쳐서 복사해 가는 곳"이지 이 기기에 남기는 곳이 아니다. */
 function copyEditor() {
   stashEditor();
-  const text = editor.draft[editor.mode];
   const el = $('editStatus');
-  const done = () => {
+  const n = parseItems(editor.draft[editor.mode]).length;
+
+  toClipboard(buildPrompt()).then(() => {
     el.classList.remove('warn');
-    el.textContent = '복사했습니다 — 붙여넣어 전달하면 전 기기에 반영됩니다';
+    el.textContent = '복사했습니다 (' + n + '개 + 지시문) — 클로드코드에 그대로 붙여넣으세요';
     ping();
-    setTimeout(paintEditStatus, 2600);
-  };
-  const fallback = () => {
-    // 클립보드 API 가 막힌 환경(구형·비 https)에서는 선택만 해준다
+    setTimeout(paintEditStatus, 3200);
+  }, () => {
     const ta = $('editText');
     ta.focus(); ta.select();
     el.classList.add('warn');
-    el.textContent = '전체 선택했습니다 — 직접 복사하세요 (⌘C)';
-    setTimeout(paintEditStatus, 2600);
-  };
-  try {
-    if (navigator.clipboard && location.protocol !== 'file:') {
-      navigator.clipboard.writeText(text).then(done, fallback);
-    } else { fallback(); }
-  } catch (e) { fallback(); }
+    el.textContent = '클립보드가 막혀 본문만 선택했습니다 — 직접 복사하세요 (⌘C)';
+    setTimeout(paintEditStatus, 3200);
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════
