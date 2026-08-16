@@ -1,6 +1,6 @@
 {
-  "name": "루틴",
-  "short_name": "루틴",
+  "name": "Routine",
+  "short_name": "Routine",
   "description": "모닝·이브닝 루틴을 한 번에 한 항목씩",
   "start_url": "./",
   "scope": "./",
