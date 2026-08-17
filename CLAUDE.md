@@ -28,7 +28,8 @@
 ├── mac/
 │   ├── Routine.swift      맥앱 소스 (WKWebView + 클로드코드 다리)
 │   ├── icon-mac-1024.png  맥 전용 아이콘 (여백 + 둥근 모서리 — D-019)
-│   └── routine.app        빌드 산출물 — git 추적 안 함
+│   └── build.noindex/     빌드 산출물 (routine.app) — git 추적 안 함
+│                          .noindex 라 Spotlight·Alfred 가 색인하지 않는다 (D-021)
 ├── tools/
 │   ├── check.sh           회귀 검사
 │   ├── make-icons.py      아이콘 생성 (웹용 + 맥용)

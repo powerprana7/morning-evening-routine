@@ -1,16 +1,21 @@
 #!/bin/bash
 # 맥앱 빌드 — mac/Routine.swift 를 routine.app 으로 만든다 (D-016)
 #
-#   tools/build-mac-app.sh            빌드만  (mac/routine.app)
+#   tools/build-mac-app.sh            빌드만  (mac/build.noindex/routine.app)
 #   tools/build-mac-app.sh --install  빌드 + /Applications 에 설치
 #
 # 필요한 것: Xcode Command Line Tools (swiftc). Xcode 본체는 필요 없다.
+#
+# 산출물을 .noindex 폴더에 두는 이유 (D-021):
+# 이름이 .noindex 로 끝나는 폴더는 Spotlight 가 색인하지 않는다. 그래야
+# Alfred 에서 "routine" 을 쳤을 때 설치본(/Applications) 하나만 뜬다.
+# 예전처럼 mac/routine.app 에 두면 빌드본과 설치본이 둘 다 앱으로 잡힌다.
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$HERE/mac/Routine.swift"
-APP="$HERE/mac/routine.app"
+APP="$HERE/mac/build.noindex/routine.app"
 NAME="Routine"
 
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
