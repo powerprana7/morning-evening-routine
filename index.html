@@ -25,7 +25,7 @@
   --accent: #c2703a;  --btn-bg: #23211c;  --btn-fg: #fdfaf3;
   --pad: clamp(20px, 5vw, 48px);
 }
-body[data-mode="evening"] {
+body[data-theme="dark"] {
   --bg: #0d1015;  --fg: #e7e9ed;  --muted: #6d7783;  --line: #1e242c;
   --accent: #7fa8cc;  --btn-bg: #e7e9ed;  --btn-fg: #0d1015;
 }
@@ -81,16 +81,66 @@ button {
 .ghost:active { opacity: .55; }
 
 /* ── 시작 화면 ─────────────────────────────────────────────────── */
-#screen-start { justify-content: center; align-items: center; text-align: center; gap: 40px; }
-.mode-pick { display: flex; gap: 10px; padding: 6px; border: 1px solid var(--line); border-radius: 999px; }
+/* 자주 쓰는 루틴은 여기 큰 버튼으로 바로 보이고, 가끔 쓰는 것은
+   오른쪽 위 메뉴 아이콘 뒤에 있다 (D-023) */
+#screen-start { gap: 20px; }
+.start-head { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.start-brand { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+.icon-btn {
+  flex: none; width: 48px; height: 48px; border-radius: 14px;
+  display: grid; place-items: center; font-size: 1.2rem; color: var(--muted);
+  border: 1px solid var(--line);
+  transition: opacity .12s ease, border-color .15s ease;
+}
+.icon-btn:active { opacity: .55; }
+
+/* 루틴 고르기 목록 — 시작 화면과 '가끔' 화면이 같은 모양을 쓴다 */
+.pick-list {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  width: 100%; max-width: 560px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 4px 0;
+}
+/* safe center — 화면이 짧아 목록이 넘칠 때 가운데 정렬이 첫 항목을 위로
+   밀어내 손댈 수 없게 만드는 것을 막는다. 모르는 브라우저는 앞줄로 떨어진다 */
+.pick-list.middle { justify-content: center; justify-content: safe center; }
+.routine-btn {
+  flex: none; width: 100%; text-align: left;
+  padding: 22px 24px; border-radius: 18px;
+  border: 1px solid var(--line); background: transparent;
+  display: flex; flex-direction: column; gap: 6px; min-height: 68px;
+  transition: transform .12s ease, opacity .12s ease;
+}
+.routine-btn:active { transform: scale(.985); opacity: .9; }
+/* 시간대로 제안된 하나만 채워서 그린다 — 예전 `시작` 버튼 자리를 대신한다 */
+.routine-btn[data-suggested="true"] {
+  background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg);
+}
+.rb-name {
+  font-size: clamp(1.25rem, 5vw, 1.7rem); font-weight: 700;
+  letter-spacing: -.02em; line-height: 1.3; word-break: keep-all;
+}
+.rb-sub { color: var(--muted); font-size: .84rem; }
+.routine-btn[data-suggested="true"] .rb-sub { color: var(--btn-fg); opacity: .68; }
+.start-actions {
+  flex: none; width: 100%; max-width: 560px; margin: 0 auto;
+  display: flex; gap: 4px; justify-content: center;
+}
+
+/* ── 가끔 하는 루틴 화면 ───────────────────────────────────────── */
+#screen-more { gap: 16px; max-width: 560px; width: 100%; margin: 0 auto; }
+.more-empty { color: var(--muted); font-size: .88rem; text-align: center; padding: 48px 0; }
+
+/* ── 루틴 고르개 (편집 화면 탭) ────────────────────────────────── */
+.mode-pick {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 6px;
+  border: 1px solid var(--line); border-radius: 999px;
+}
 .mode-pick button {
-  padding: 12px 28px; border-radius: 999px; font-size: 1rem;
-  font-weight: 600; color: var(--muted); min-height: 48px;
+  padding: 10px 18px; border-radius: 999px; font-size: .92rem;
+  font-weight: 600; color: var(--muted); min-height: 44px;
 }
 .mode-pick button[aria-selected="true"] { background: var(--btn-bg); color: var(--btn-fg); }
-.start-title { font-size: clamp(2rem, 9vw, 3.2rem); font-weight: 750; letter-spacing: -.03em; }
-.start-sub { color: var(--muted); font-size: .95rem; margin-top: 10px; }
-.start-actions { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
 .footnote {
   position: fixed; right: 14px;
   bottom: calc(10px + env(safe-area-inset-bottom));
@@ -161,7 +211,8 @@ button {
 
 /* ── 편집 화면 ─────────────────────────────────────────────────── */
 #screen-edit { gap: 14px; max-width: 720px; width: 100%; margin: 0 auto; }
-.edit-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex: none; }
+.edit-head { display: flex; flex-wrap: wrap; justify-content: space-between;
+            align-items: center; gap: 12px; flex: none; }
 .edit-title { font-size: 1.15rem; font-weight: 700; }
 .edit-hint {
   flex: none; color: var(--muted); font-size: .76rem; line-height: 1.65;
@@ -215,41 +266,43 @@ button {
 .edit-actions .primary { flex: 1; min-height: 58px; }
 </style>
 </head>
-<body data-mode="morning">
+<body data-theme="light">
 
 <div id="app">
 
-  <!-- ════ 시작 화면 ════ -->
+  <!-- ════ 시작 화면 — 자주 쓰는 루틴만 큰 버튼으로 (D-023) ════ -->
   <section id="screen-start" class="screen active">
-    <div class="mode-pick" id="modePick">
-      <button data-mode="morning" aria-selected="true">모닝</button>
-      <button data-mode="evening" aria-selected="false">이브닝</button>
+    <div class="start-head">
+      <div class="start-brand">Routine</div>
+      <button class="icon-btn" id="btnMore" title="가끔 하는 루틴"
+              aria-label="가끔 하는 루틴">☰</button>
     </div>
-    <div>
-      <div class="start-title" id="startTitle">Morning Routine</div>
-      <div class="start-sub" id="startSub">26개 항목</div>
-    </div>
+    <div class="pick-list middle" id="mainPick"></div>
     <div class="start-actions">
-      <button class="primary" id="btnStart">시작</button>
-      <div style="display:flex; gap:4px; justify-content:center;">
-        <button class="ghost" id="btnSound">🔔 소리 켬</button>
-        <button class="ghost" id="btnEdit">✎ 루틴 편집</button>
-      </div>
+      <button class="ghost" id="btnSound">🔔 소리 켬</button>
+      <button class="ghost" id="btnEdit">✎ 루틴 편집</button>
     </div>
+  </section>
+
+  <!-- ════ 가끔 하는 루틴 ════ -->
+  <section id="screen-more" class="screen">
+    <div class="edit-head">
+      <div class="edit-title">가끔 하는 루틴</div>
+      <button class="icon-btn" id="btnMoreClose" title="닫기" aria-label="닫기">✕</button>
+    </div>
+    <div class="pick-list" id="morePick"></div>
   </section>
 
   <!-- ════ 편집 화면 ════ -->
   <section id="screen-edit" class="screen">
     <div class="edit-head">
       <div class="edit-title" id="editTitle">루틴 편집</div>
-      <div class="mode-pick" id="editModePick">
-        <button data-mode="morning" aria-selected="true">모닝</button>
-        <button data-mode="evening" aria-selected="false">이브닝</button>
-      </div>
+      <div class="mode-pick" id="editModePick"></div>
     </div>
 
     <div class="edit-hint">
-      한 줄에 항목 하나. <strong>줄 순서가 곧 실행 순서</strong>다.<br>
+      위 탭에서 고칠 루틴을 고른다. 한 줄에 항목 하나,
+      <strong>줄 순서가 곧 실행 순서</strong>다.<br>
       <code>오일풀링 @10</code> → 10분에 알림 &nbsp;·&nbsp;
       <code>제자리뛰기 100회 | 가자미근</code> → <code>|</code> 뒤는 작은 설명<br>
       <strong>여기서 고친 것은 이 기기에 저장되지 않는다.</strong>
@@ -277,7 +330,7 @@ button {
     <div class="topbar">
       <div class="counter">
         <span id="cnt">1 / 26</span>
-        <span id="modeLabel">Morning</span>
+        <span id="modeLabel">모닝</span>
       </div>
       <div class="bar"><i id="barFill"></i></div>
     </div>
@@ -318,14 +371,22 @@ button {
 /* ═══════════════════════════════════════════════════════════════════
    1. 버전 — 동작이 바뀌면 반드시 올린다 (CLAUDE.md 8번)
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-08-21';
+const VERSION = '2026-08-28';
 
 /* ═══════════════════════════════════════════════════════════════════
-   2. 루틴 기본 목록 (D-006)
-      name    : 화면에 크게 뜨는 문구
-      note    : 아래 작게. 없으면 ''
-      minutes : 이 시간에 도달하면 알림이 울린다. null 이면 알림 없음.
-                (자동으로 넘어가지는 않는다 — D-004)
+   2. 루틴 기본 목록 (D-006, D-023)
+      루틴 하나가 키 하나다. 여기 적은 순서가 곧 화면에 뜨는 순서다.
+
+      label   : 화면에 크게 뜨는 이름
+      short   : 좁은 자리(진행 중 표시·편집 탭)에서 쓰는 짧은 이름
+      tier    : 'main' → 시작 화면에 큰 버튼으로 바로 뜬다 (자주 쓰는 것)
+                'more' → ☰ 메뉴 안에 들어간다 (가끔 쓰는 것)
+      theme   : 'light' | 'dark'  — 이 루틴을 도는 동안의 화면 톤
+      items   : 항목들
+        name    : 화면에 크게 뜨는 문구
+        note    : 아래 작게. 없으면 ''
+        minutes : 이 시간에 도달하면 알림이 울린다. null 이면 알림 없음.
+                  (자동으로 넘어가지는 않는다 — D-004)
 
       ⚠ 이브닝의 순서 주석
         [번호] = 원본 Todoist 번호 그대로.
@@ -333,7 +394,7 @@ const VERSION = '2026-08-21';
    ═══════════════════════════════════════════════════════════════════ */
 const ROUTINES = {
   morning: {
-    label: 'Morning Routine',
+    label: 'Morning Routine', short: '모닝', tier: 'main', theme: 'light',
     items: [
       { name: 'Get up early',                    note: '', minutes: null },
       { name: '기지개를 켠다',                    note: '', minutes: null },
@@ -365,7 +426,7 @@ const ROUTINES = {
     ],
   },
   evening: {
-    label: 'Evening Routine',
+    label: 'Evening Routine', short: '이브닝', tier: 'main', theme: 'dark',
     items: [
       { name: '입은 옷을 빨래통에 넣거나 옷걸이에 건다', note: '', minutes: null }, // [010]
       { name: '창문을 열고 환기를 시킨다',              note: '', minutes: null }, // [020]
@@ -397,7 +458,52 @@ const ROUTINES = {
       { name: 'Turn off electronics',                note: '', minutes: null }, // [배치]
     ],
   },
+
+  /* ⚠ 자리표시자 — 실제 목록을 받으면 items 를 통째로 교체한다 (B-27) */
+  practice: {
+    label: '수련과 운동', short: '수련·운동', tier: 'main', theme: 'light',
+    items: [
+      { name: '수련매트를 깔고 자리에 앉는다', note: '', minutes: null },
+      { name: '간단하게 몸을 푼다',          note: '', minutes: null },
+      { name: '호흡을 고른다',              note: '', minutes: 5    },
+      { name: '수련',                      note: '', minutes: null },
+      { name: '근력 운동',                  note: '', minutes: null },
+      { name: '유산소 운동',                note: '', minutes: null },
+      { name: '마무리 스트레칭',             note: '', minutes: null },
+    ],
+  },
+
+  /* ⚠ 자리표시자 — 실제 목록을 받으면 items 를 통째로 교체한다 (B-28) */
+  departure: {
+    label: '출국 전 체크리스트', short: '출국 전', tier: 'more', theme: 'light',
+    items: [
+      { name: '여권 · 비자',            note: '유효기간 6개월 이상 남았는지', minutes: null },
+      { name: '항공권 · 좌석',          note: '', minutes: null },
+      { name: '숙소 예약',             note: '', minutes: null },
+      { name: '여행자보험',            note: '', minutes: null },
+      { name: '환전 · 해외 결제 카드',   note: '', minutes: null },
+      { name: '유심 · 로밍',           note: '', minutes: null },
+      { name: '충전기 · 보조배터리 · 어댑터', note: '', minutes: null },
+      { name: '상비약',               note: '', minutes: null },
+      { name: '세면도구 · 화장품',      note: '', minutes: null },
+      { name: '옷 · 속옷 · 양말',       note: '', minutes: null },
+      { name: '전자기기 전원을 끈다',    note: '가습기 포함', minutes: null },
+      { name: '창문 · 가스 · 수도를 잠근다', note: '', minutes: null },
+      { name: '쓰레기를 비운다',        note: '', minutes: null },
+      { name: '냉장고를 정리한다',      note: '', minutes: null },
+    ],
+  },
 };
+
+/* tier 별 키 목록. 인자가 없으면 전부. 순서는 ROUTINES 에 적은 순서 그대로다. */
+function routineKeys(tier) {
+  return Object.keys(ROUTINES).filter((k) => !tier || ROUTINES[k].tier === tier);
+}
+
+/* 지금 시각이 제안하는 루틴. 정오를 경계로 모닝/이브닝 — 어디까지나 제안이다 */
+function suggestKey() {
+  return new Date().getHours() < 12 ? 'morning' : 'evening';
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    3. 저장 — 소리 설정 하나뿐 (D-015)
@@ -573,30 +679,69 @@ const $ = (id) => document.getElementById(id);
    ═══════════════════════════════════════════════════════════════════ */
 function show(name) {
   state.screen = name;
-  ['start', 'run', 'done', 'edit'].forEach((s) => {
+  ['start', 'run', 'done', 'edit', 'more'].forEach((s) => {
     $('screen-' + s).classList.toggle('active', s === name);
   });
   $('ver').style.display = (name === 'run' || name === 'edit') ? 'none' : '';
 }
 
-function pickMode(mode) {
-  state.mode = mode;
-  document.body.dataset.mode = mode;
-  const data = ROUTINES[mode];
-  $('startTitle').textContent = data.label;
-  $('startSub').textContent = data.items.length + '개 항목';
-  $('modeLabel').textContent = mode === 'morning' ? 'Morning' : 'Evening';
-  [...$('modePick').children].forEach((b) => {
-    b.setAttribute('aria-selected', String(b.dataset.mode === mode));
-  });
+/* 루틴 하나짜리 큰 버튼. 시작 화면과 ☰ 화면이 같은 것을 쓴다 */
+function routineButton(key, suggested) {
+  const data = ROUTINES[key];
+  const b = document.createElement('button');
+  b.className = 'routine-btn';
+  b.dataset.key = key;
+  if (suggested) b.dataset.suggested = 'true';
+
+  const name = document.createElement('span');
+  name.className = 'rb-name';
+  name.textContent = data.label;
+
+  const sub = document.createElement('span');
+  sub.className = 'rb-sub';
+  sub.textContent = data.items.length + '개 항목' + (suggested ? '  ·  지금 시간' : '');
+
+  b.append(name, sub);
+  return b;
+}
+
+/* 시작 화면을 다시 그린다. 시간대 제안은 그릴 때마다 새로 계산한다 —
+   정오를 넘겨 돌아왔는데 옛 제안이 남아 있으면 안 된다. */
+function paintStart() {
+  const suggested = suggestKey();
+  document.body.dataset.theme = ROUTINES[suggested].theme;
+  const box = $('mainPick');
+  box.textContent = '';
+  routineKeys('main').forEach((k) => box.append(routineButton(k, k === suggested)));
+}
+
+/* ☰ 안쪽 — 가끔 하는 루틴. 여기서는 제안을 하지 않는다 */
+function paintMore() {
+  const box = $('morePick');
+  box.textContent = '';
+  const keys = routineKeys('more');
+  if (!keys.length) {
+    const empty = document.createElement('div');
+    empty.className = 'more-empty';
+    empty.textContent = '가끔 하는 루틴이 아직 없습니다';
+    box.append(empty);
+    return;
+  }
+  keys.forEach((k) => box.append(routineButton(k, false)));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
    9. 실행
    ═══════════════════════════════════════════════════════════════════ */
-function start() {
+function start(key) {
+  const data = ROUTINES[key];
+  if (!data || !data.items.length) return;   // 빈 루틴은 시작하지 않는다
+
   wakeAudio();                      // 첫 조작에서 오디오를 깨워 둔다
-  state.items = ROUTINES[state.mode].items;
+  state.mode = key;
+  document.body.dataset.theme = data.theme;
+  $('modeLabel').textContent = data.short;
+  state.items = data.items;
   state.idx = 0;
   state.records = [];
   state.runStart = Date.now();
@@ -701,7 +846,7 @@ function goHome() {
   state.ticker = null;
   state.records = [];
   show('start');
-  pickMode(state.mode);
+  paintStart();
 }
 
 function finish() {
@@ -710,8 +855,7 @@ function finish() {
   state.ticker = null;
 
   const totalMs = Date.now() - state.runStart;
-  $('doneTitle').textContent =
-    (state.mode === 'morning' ? 'Morning' : 'Evening') + ' Routine 완료';
+  $('doneTitle').textContent = ROUTINES[state.mode].label + ' 완료';
   $('doneTotal').textContent = fmt(totalMs);
 
   const box = $('summary');
@@ -734,19 +878,33 @@ function finish() {
    9.5 편집 화면 (D-013)
        편집·순서변경·내보내기·불러오기가 전부 이 한 화면이다.
    ═══════════════════════════════════════════════════════════════════ */
-const editor = { mode: 'morning', draft: { morning: '', evening: '' } };
+const editor = { mode: 'morning', draft: {} };
 
 function openEditor() {
-  const data = ROUTINES;
-  editor.mode = state.mode;
-  editor.draft.morning = serializeItems(data.morning.items);
-  editor.draft.evening = serializeItems(data.evening.items);
+  editor.mode = ROUTINES[state.mode] ? state.mode : routineKeys('main')[0];
+  editor.draft = {};
+  Object.keys(ROUTINES).forEach((k) => {
+    editor.draft[k] = serializeItems(ROUTINES[k].items);
+  });
+  paintEditTabs();
   show('edit');
   paintEditor();
 }
 
+/* 탭은 ROUTINES 에서 만든다 — 루틴을 늘려도 여기는 손대지 않는다 (D-023) */
+function paintEditTabs() {
+  const box = $('editModePick');
+  box.textContent = '';
+  Object.keys(ROUTINES).forEach((k) => {
+    const b = document.createElement('button');
+    b.dataset.mode = k;
+    b.textContent = ROUTINES[k].short;
+    box.append(b);
+  });
+}
+
 function paintEditor() {
-  document.body.dataset.mode = editor.mode;
+  document.body.dataset.theme = ROUTINES[editor.mode].theme;
   $('editText').value = editor.draft[editor.mode];
   $('editTitle').textContent = '루틴 텍스트';
   [...$('editModePick').children].forEach((b) => {
@@ -759,10 +917,11 @@ function paintEditor() {
 
 function paintEditStatus() {
   const el = $('editStatus');
-  const m = parseItems(editor.draft.morning).length;
-  const e = parseItems(editor.draft.evening).length;
-  const cur = editor.mode === 'morning' ? m : e;
-  el.textContent = '모닝 ' + m + '개 · 이브닝 ' + e + '개';
+  const keys = Object.keys(ROUTINES);
+  const cur = parseItems(editor.draft[editor.mode]).length;
+  const total = keys.reduce((s, k) => s + parseItems(editor.draft[k]).length, 0);
+  el.textContent = ROUTINES[editor.mode].short + ' ' + cur + '개'
+                 + '  ·  전체 ' + keys.length + '개 루틴 ' + total + '개';
   el.classList.toggle('warn', cur === 0);
   if (cur === 0) el.textContent += '  —  지금 보는 쪽이 비어 있습니다';
 }
@@ -826,20 +985,20 @@ function toClipboard(text) {
 /* 클로드코드에 그대로 붙여넣을 수 있는 지시문까지 붙여서 만든다 (D-018).
    개수를 함께 적어 두는 것이 중요하다 — 붙여넣다 줄이 잘리면 그것만이 단서다. */
 function buildPrompt() {
-  const key = editor.mode;                       // morning | evening
-  const label = key === 'morning' ? '모닝' : '이브닝';
+  const key = editor.mode;                       // ROUTINES 의 키
+  const label = ROUTINES[key].label;
   const body = editor.draft[key].trim();
   const count = parseItems(body).length;
   return [
-    'github.com/powerprana7/morning-evening-routine 의 index.html 에서 ROUTINES.' + key + ' 을',
-    '아래 목록으로 통째로 교체하고 push 해줘.',
+    'github.com/powerprana7/morning-evening-routine 의 index.html 에서',
+    'ROUTINES.' + key + ' 의 items 를 아래 목록으로 통째로 교체하고 push 해줘.',
     '',
     '형식: 한 줄에 항목 하나 · 줄 순서가 곧 실행 순서 · "|" 뒤는 보조 설명 · "@숫자"는 분 알림',
-    '아래는 ' + label + ' 루틴 ' + count + '개다. 반영 전에 개수가 맞는지 확인해줘.',
+    '아래는 ' + label + ' ' + count + '개다. 반영 전에 개수가 맞는지 확인해줘.',
     '',
-    '--- ' + label + ' 루틴 시작 ---',
+    '--- ' + label + ' 시작 ---',
     body,
-    '--- ' + label + ' 루틴 끝 ---',
+    '--- ' + label + ' 끝 ---',
   ].join('\n');
 }
 
@@ -907,15 +1066,20 @@ $('btnEditCopy').addEventListener('click', copyEditor);
 if (inMacApp) $('btnEditCopy').textContent = '클로드코드로 보내기';
 $('btnEditCancel').addEventListener('click', () => {
   show('start');
-  pickMode(state.mode);
+  paintStart();
 });
 
-$('modePick').addEventListener('click', (e) => {
-  const b = e.target.closest('button');
-  if (b) pickMode(b.dataset.mode);
-});
+/* 루틴 버튼은 누르는 즉시 시작한다 — 고르기와 시작을 한 번에 (D-023) */
+const pickHandler = (e) => {
+  const b = e.target.closest('button.routine-btn');
+  if (b) start(b.dataset.key);
+};
+$('mainPick').addEventListener('click', pickHandler);
+$('morePick').addEventListener('click', pickHandler);
 
-$('btnStart').addEventListener('click', start);
+$('btnMore').addEventListener('click', () => { paintMore(); show('more'); });
+$('btnMoreClose').addEventListener('click', () => { show('start'); paintStart(); });
+
 $('btnDone').addEventListener('click', () => advance(false));
 $('btnSkip').addEventListener('click', () => advance(true));
 $('btnBack').addEventListener('click', back);
@@ -923,7 +1087,7 @@ $('btnHome').addEventListener('click', goHome);
 
 $('btnRestart').addEventListener('click', () => {
   show('start');
-  pickMode(state.mode);
+  paintStart();
 });
 
 $('btnSound').addEventListener('click', () => {
@@ -937,8 +1101,17 @@ function paintSoundBtn() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (state.screen === 'start') {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start(); }
+  /* 고르기 화면들 — 엔터는 제안된 루틴, 숫자키는 위에서부터 n 번째 (맥에서 쓸 때) */
+  if (state.screen === 'start' || state.screen === 'more') {
+    const keys = routineKeys(state.screen === 'start' ? 'main' : 'more');
+    if (state.screen === 'start' && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault(); start(suggestKey()); return;
+    }
+    if (state.screen === 'more' && e.key === 'Escape') {
+      e.preventDefault(); show('start'); paintStart(); return;
+    }
+    const nth = parseInt(e.key, 10);
+    if (nth >= 1 && nth <= keys.length) { e.preventDefault(); start(keys[nth - 1]); }
     return;
   }
   if (state.screen !== 'run') return;
@@ -950,8 +1123,8 @@ document.addEventListener('keydown', (e) => {
 /* ═══════════════════════════════════════════════════════════════════
    11. 시작
    ═══════════════════════════════════════════════════════════════════ */
-// 정오를 경계로 모닝/이브닝을 골라 둔다. 어디까지나 제안이고 탭으로 바꾼다.
-pickMode(new Date().getHours() < 12 ? 'morning' : 'evening');
+// 시작 화면을 그린다. 정오를 경계로 하나를 제안해 두지만 누르는 것은 사용자다.
+paintStart();
 paintSoundBtn();
 $('ver').textContent = VERSION;
 

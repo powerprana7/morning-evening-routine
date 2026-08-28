@@ -8,6 +8,7 @@
 #   2. 시간 표기 fmt() 가 맞는가          (경계값 9건)
 #   3. 텍스트 ↔ 목록 변환이 맞는가        (형식 12건 + 실제 루틴 왕복 전건)
 #   4. 항목 이름에 중복이 없는가
+#   5. 루틴 메타(label·short·tier·theme·items)가 갖춰져 있는가
 #
 # 이 검사가 못 하는 것 — 전부 사람이 눌러야 판정된다
 #   · 소리가 실제로 나는가            (기기 볼륨·무음·자동재생 정책)
@@ -87,7 +88,7 @@ eq("전부 빈 입력",   parseItems("\n\n   \n").length,    0);
 
 /* 실제 루틴 왕복 — 직렬화했다 되읽으면 원본과 같아야 한다.
    여기가 깨지면 편집 화면에서 저장하는 순간 루틴이 망가진다. */
-["morning", "evening"].forEach(function (k) {
+Object.keys(ROUTINES).forEach(function (k) {
   var orig = ROUTINES[k].items;
   var back = parseItems(serializeItems(orig));
   eq("왕복 " + k + " 개수", back.length, orig.length);
@@ -95,11 +96,30 @@ eq("전부 빈 입력",   parseItems("\n\n   \n").length,    0);
 });
 
 /* ── 4. 이름 중복 ── */
-["morning", "evening"].forEach(function (k) {
+Object.keys(ROUTINES).forEach(function (k) {
   var names = ROUTINES[k].items.map(function (i) { return i.name; });
   var dup = names.filter(function (n, i) { return names.indexOf(n) !== i; });
   eq("중복 없음 " + k, dup, []);
 });
+
+/* ── 5. 루틴 메타 (D-023) ──
+   루틴을 늘릴 때 메타를 빠뜨리면 시작 화면에 안 뜨거나 톤이 어긋난다.
+   화면을 안 띄우고 잡을 수 있는 것은 여기까지다. */
+Object.keys(ROUTINES).forEach(function (k) {
+  var r = ROUTINES[k];
+  eq("메타 label " + k,  typeof r.label === "string" && r.label.length > 0, true);
+  eq("메타 short " + k,  typeof r.short === "string" && r.short.length > 0, true);
+  eq("메타 tier " + k,   r.tier === "main" || r.tier === "more", true);
+  eq("메타 theme " + k,  r.theme === "light" || r.theme === "dark", true);
+  eq("메타 items " + k,  Array.isArray(r.items) && r.items.length > 0, true);
+});
+/* 시작 화면이 비면 앱을 시작할 방법이 없다 */
+eq("main 루틴이 하나 이상",
+   Object.keys(ROUTINES).filter(function (k) { return ROUTINES[k].tier === "main"; }).length > 0,
+   true);
+/* 시간대 제안(정오 경계)이 가리키는 두 키는 반드시 있어야 한다 */
+eq("제안 대상 morning 존재", !!ROUTINES.morning, true);
+eq("제안 대상 evening 존재", !!ROUTINES.evening, true);
 
 out.unshift(fail ? "실패 " + fail + "건 / 통과 " + pass + "건"
                  : "통과 " + pass + "건 / 실패 0건");

@@ -5,7 +5,7 @@
  *   이 앱에서 "전 기기가 같은 루틴을 본다"는 것이 오프라인보다 중요하므로,
  *   항상 새것을 먼저 받아보고 안 되면(비행기 모드 등) 캐시를 쓴다.
  */
-const CACHE = 'routine-v2';
+const CACHE = 'routine-v3';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
                 './icon-192.png', './icon-512.png'];
 
