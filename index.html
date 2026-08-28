@@ -179,6 +179,66 @@ button {
 .bottom { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .subactions { display: flex; gap: 4px; }
 
+/* ── 뷰 방식 전환 (D-024) ──────────────────────────────────────────
+   기본값은 루틴이 정한다 (ROUTINES.<키>.view). 이 버튼은 그 회차에만
+   걸리는 예외이고, 다음에 시작하면 루틴의 기본값으로 돌아간다. */
+.counter-right { display: flex; align-items: center; gap: 10px; }
+.view-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0 8px;
+  /* 글자 높이만큼만 자리를 차지하게 — 44px 은 손가락 몫이지 여백이 아니다 */
+  margin: -12px -8px -12px 0;
+  border-radius: 12px; color: var(--muted);
+  font-size: .82rem; font-weight: 600; letter-spacing: -.01em;
+  transition: opacity .12s ease;
+}
+.view-btn:active { opacity: .5; }
+.view-glyph { font-size: .95rem; line-height: 1; }
+
+/* 둘 중 하나만 뜬다 */
+#screen-run[data-view="one"]  #runList { display: none; }
+#screen-run[data-view="list"] .card    { display: none; }
+
+.run-list {
+  position: relative;                     /* 아래 스크롤 계산의 기준점 */
+  flex: 1 1 auto; min-height: 0;          /* 없으면 내부 스크롤이 안 생긴다 */
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  width: 100%; max-width: 560px; margin: 0 auto; padding: 8px 0;
+  /* 위아래로 더 있다는 것을 보여주는 페이드 — 요약 화면과 같은 방식 */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px,
+                              #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px,
+                              #000 calc(100% - 14px), transparent 100%);
+}
+.run-row {
+  display: flex; gap: 12px; align-items: baseline;
+  padding: 13px 10px; border-bottom: 1px solid var(--line);
+  border-radius: 10px;
+}
+.run-num { flex: none; width: 2.1em; text-align: right;
+           color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.run-body { flex: 1 1 auto; min-width: 0; }
+.run-name { font-size: 1rem; line-height: 1.4; word-break: keep-all; }
+.run-note { color: var(--muted); font-size: .8rem; margin-top: 3px; word-break: keep-all; }
+.run-side { flex: none; color: var(--muted); font-size: .78rem;
+            font-variant-numeric: tabular-nums; }
+.run-side.reached { color: var(--accent); font-weight: 600; }
+
+/* 지금 할 것 — 목록 안에서도 어느 것이 지금인지가 한눈에 들어와야 한다 */
+.run-row[data-st="now"] {
+  background: var(--btn-bg); color: var(--btn-fg); border-bottom-color: transparent;
+}
+.run-row[data-st="now"] .run-name { font-weight: 700; font-size: 1.12rem; }
+.run-row[data-st="now"] .run-num,
+.run-row[data-st="now"] .run-note,
+.run-row[data-st="now"] .run-side { color: var(--btn-fg); opacity: .7; }
+.run-row[data-st="now"] .run-side.reached { color: var(--btn-fg); opacity: 1; font-weight: 700; }
+
+.run-row[data-st="todo"] { opacity: .45; }
+.run-row[data-st="done"] .run-name { color: var(--muted); }
+.run-row[data-st="skip"] .run-name { color: var(--muted); text-decoration: line-through; opacity: .6; }
+
 /* ── 요약 화면 ─────────────────────────────────────────────────── */
 #screen-done { gap: 20px; }
 .done-head { text-align: center; padding-top: 12px; flex: none; }
@@ -330,7 +390,11 @@ button {
     <div class="topbar">
       <div class="counter">
         <span id="cnt">1 / 26</span>
-        <span id="modeLabel">모닝</span>
+        <span class="counter-right">
+          <span id="modeLabel">모닝</span>
+          <!-- 뷰 방식 전환 — 한 항목 ↔ 전체 목록 (D-024) -->
+          <button class="view-btn" id="btnView" type="button"></button>
+        </span>
       </div>
       <div class="bar"><i id="barFill"></i></div>
     </div>
@@ -340,6 +404,9 @@ button {
       <div class="item-note" id="itemNote"></div>
       <div class="times" id="times"></div>
     </div>
+
+    <!-- 전체 목록 뷰 (D-024). 카드와 둘 중 하나만 뜬다 -->
+    <div class="run-list" id="runList"></div>
 
     <div class="bottom">
       <button class="primary" id="btnDone">완료</button>
@@ -382,6 +449,9 @@ const VERSION = '2026-08-28';
       tier    : 'main' → 시작 화면에 큰 버튼으로 바로 뜬다 (자주 쓰는 것)
                 'more' → ☰ 메뉴 안에 들어간다 (가끔 쓰는 것)
       theme   : 'light' | 'dark'  — 이 루틴을 도는 동안의 화면 톤
+      view    : 'one' | 'list'    — 항목을 어떻게 보여줄지의 기본값 (D-024)
+                  'one'  실행 순서가 중요한 루틴. 한 번에 한 항목만 보인다
+                  'list' 순서와 무관하게 빠르게 훑고 체크하는 루틴. 전부 보인다
       items   : 항목들
         name    : 화면에 크게 뜨는 문구
         note    : 아래 작게. 없으면 ''
@@ -395,6 +465,7 @@ const VERSION = '2026-08-28';
 const ROUTINES = {
   morning: {
     label: 'Morning Routine', short: '모닝', tier: 'main', theme: 'light',
+    view: 'one',
     items: [
       { name: 'Get up early',                    note: '', minutes: null },
       { name: '기지개를 켠다',                    note: '', minutes: null },
@@ -427,6 +498,7 @@ const ROUTINES = {
   },
   evening: {
     label: 'Evening Routine', short: '이브닝', tier: 'main', theme: 'dark',
+    view: 'one',
     items: [
       { name: '입은 옷을 빨래통에 넣거나 옷걸이에 건다', note: '', minutes: null }, // [010]
       { name: '창문을 열고 환기를 시킨다',              note: '', minutes: null }, // [020]
@@ -462,6 +534,7 @@ const ROUTINES = {
   /* ⚠ 자리표시자 — 실제 목록을 받으면 items 를 통째로 교체한다 (B-27) */
   practice: {
     label: '수련과 운동', short: '수련·운동', tier: 'main', theme: 'light',
+    view: 'one',
     items: [
       { name: '수련매트를 깔고 자리에 앉는다', note: '', minutes: null },
       { name: '간단하게 몸을 푼다',          note: '', minutes: null },
@@ -476,6 +549,7 @@ const ROUTINES = {
   /* ⚠ 자리표시자 — 실제 목록을 받으면 items 를 통째로 교체한다 (B-28) */
   departure: {
     label: '출국 전 체크리스트', short: '출국 전', tier: 'more', theme: 'light',
+    view: 'list',
     items: [
       { name: '여권 · 비자',            note: '유효기간 6개월 이상 남았는지', minutes: null },
       { name: '항공권 · 좌석',          note: '', minutes: null },
@@ -519,6 +593,13 @@ function loadSoundOn() {
 function saveSoundOn(on) {
   try { localStorage.setItem(KEY_SOUND, on ? 'on' : 'off'); } catch (e) {}
 }
+
+/* 뷰 방식 딱지. 뷰 자체는 루틴이 정하므로(ROUTINES.<키>.view) 여기에
+   저장해 둘 것이 없다 — 실행 중 전환은 그 회차에만 걸린다 (D-024). */
+const VIEW_LABEL = {
+  one:  { glyph: '\u25A4', text: '목록',   aria: '전체 목록으로 보기' },
+  list: { glyph: '\u25A3', text: '하나씩', aria: '한 번에 한 항목만 보기' },
+};
 
 /* ═══════════════════════════════════════════════════════════════════
    3.5 텍스트 ↔ 목록 변환 (D-013)
@@ -669,6 +750,7 @@ const state = {
   chimed: false,   // 현재 항목의 지정 시간 알림을 울렸는가
   records: [],     // { name, ms, skipped }
   soundOn: loadSoundOn(),
+  view: 'one',        // 'one' | 'list' — start() 가 루틴 것으로 건다 (D-024)
   ticker: null,
 };
 
@@ -731,6 +813,96 @@ function paintMore() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   8.5 뷰 방식 — 한 항목 ↔ 전체 목록 (D-024)
+       같은 상태를 다른 방식으로 그릴 뿐이다. 진행 로직(완료·건너뛰기·
+       이전·시간 재기)은 두 뷰가 완전히 같은 것을 쓴다.
+   ═══════════════════════════════════════════════════════════════════ */
+/* 버튼에 적는 것은 '지금 뷰'가 아니라 '누르면 갈 뷰'다 — 눌렀을 때
+   무엇이 되는지가 보여야 한다 */
+function paintViewBtn() {
+  const t = VIEW_LABEL[state.view];
+  const b = $('btnView');
+  b.textContent = '';
+  const g = document.createElement('span');
+  g.className = 'view-glyph';
+  g.textContent = t.glyph;
+  const s2 = document.createElement('span');
+  s2.textContent = t.text;
+  b.append(g, s2);
+  b.setAttribute('aria-label', t.aria);
+  b.title = t.aria;
+}
+
+function applyView() {
+  $('screen-run').dataset.view = state.view;
+  paintViewBtn();
+}
+
+function paintList() {
+  const box = $('runList');
+  box.textContent = '';
+  state.items.forEach((item, i) => {
+    const rec = state.records[i];            // 지나온 항목만 기록이 있다
+    const row = document.createElement('div');
+    row.className = 'run-row';
+    row.dataset.st = i === state.idx ? 'now'
+                   : rec ? (rec.skipped ? 'skip' : 'done')
+                   : 'todo';
+    if (i === state.idx) row.id = 'runNow';
+
+    const num = document.createElement('span');
+    num.className = 'run-num';
+    num.textContent = i + 1;
+
+    const body = document.createElement('div');
+    body.className = 'run-body';
+    const name = document.createElement('div');
+    name.className = 'run-name';
+    name.textContent = item.name;
+    body.append(name);
+    if (item.note) {
+      const note = document.createElement('div');
+      note.className = 'run-note';
+      note.textContent = item.note;
+      body.append(note);
+    }
+
+    const side = document.createElement('span');
+    side.className = 'run-side';
+    if (rec) side.textContent = rec.skipped ? '건너뜀' : fmt(rec.ms);
+    else if (i === state.idx) side.id = 'runNowTime';   // tick() 이 채운다
+    else if (item.minutes) side.textContent = item.minutes + '분';
+
+    row.append(num, body, side);
+    box.append(row);
+  });
+}
+
+/* 목록이 길면 지금 할 것이 화면 밖으로 나간다 — 늘 가운데로 끌어온다.
+   두 가지가 안 통해서 자리를 직접 계산해 넣는다 (크롬에서 확인) —
+   scrollIntoView 는 이 목록 안을 굴리지 않고(바깥이 overflow:hidden 이다),
+   scrollTo 의 behavior:'smooth' 는 아무 일도 하지 않는다. 부드럽게 밀리는
+   맛보다 지금 할 것이 반드시 보이는 쪽이 중요하므로 바로 옮긴다. */
+function scrollToNow() {
+  const box = $('runList');
+  const el = $('runNow');
+  if (!box || !el) return;
+  const want = el.offsetTop - (box.clientHeight - el.offsetHeight) / 2;
+  box.scrollTop = Math.max(0, Math.min(want, box.scrollHeight - box.clientHeight));
+}
+
+/* 이 회차에만 걸리는 예외. 다음에 루틴을 시작하면 루틴의 기본값으로 돌아간다 */
+function toggleView() {
+  state.view = state.view === 'one' ? 'list' : 'one';
+  applyView();
+  if (state.screen === 'run' && state.view === 'list') {
+    paintList();
+    tick();          // 지금 항목의 시간을 빈칸으로 두지 않는다
+    scrollToNow();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    9. 실행
    ═══════════════════════════════════════════════════════════════════ */
 function start(key) {
@@ -740,6 +912,10 @@ function start(key) {
   wakeAudio();                      // 첫 조작에서 오디오를 깨워 둔다
   state.mode = key;
   document.body.dataset.theme = data.theme;
+  // 뷰는 루틴마다 정해진다. 지난 회차에 손으로 바꿔 둔 것이 다음 루틴까지
+  // 따라오면 안 된다 — 순서가 중요한 루틴에 다음 항목이 보여 버린다 (D-024)
+  state.view = data.view;
+  applyView();
   $('modeLabel').textContent = data.short;
   state.items = data.items;
   state.idx = 0;
@@ -765,10 +941,13 @@ function render(animate) {
     $('cnt').textContent = (state.idx + 1) + ' / ' + state.items.length;
     $('barFill').style.width = (state.idx / state.items.length * 100) + '%';
     $('times').classList.remove('reached');
+    if (state.view === 'list') { paintList(); scrollToNow(); }
     tick();
   };
 
-  if (!animate) { paint(); return; }
+  // 목록 뷰에서는 카드가 숨어 있어 넘어가는 애니메이션이 보이지 않는다.
+  // 220ms 를 기다릴 이유가 없으므로 바로 그린다
+  if (!animate || state.view === 'list') { paint(); return; }
 
   const card = $('card');
   card.classList.add('leaving');
@@ -807,6 +986,14 @@ function tick() {
     }
   }
   $('times').textContent = text;
+
+  if (state.view === 'list') {
+    const el = $('runNowTime');
+    if (el) {
+      el.textContent = fmt(itemMs) + (item.minutes ? '  /  ' + item.minutes + '분' : '');
+      el.classList.toggle('reached', !!item.minutes && itemMs >= item.minutes * 60000);
+    }
+  }
 }
 
 function advance(skipped) {
@@ -1084,6 +1271,7 @@ $('btnDone').addEventListener('click', () => advance(false));
 $('btnSkip').addEventListener('click', () => advance(true));
 $('btnBack').addEventListener('click', back);
 $('btnHome').addEventListener('click', goHome);
+$('btnView').addEventListener('click', toggleView);
 
 $('btnRestart').addEventListener('click', () => {
   show('start');
@@ -1118,6 +1306,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advance(false); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); advance(true); }
   else if (e.key === 'ArrowLeft')  { e.preventDefault(); back(); }
+  else if (e.key === 'v' || e.key === 'V') { e.preventDefault(); toggleView(); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1126,6 +1315,7 @@ document.addEventListener('keydown', (e) => {
 // 시작 화면을 그린다. 정오를 경계로 하나를 제안해 두지만 누르는 것은 사용자다.
 paintStart();
 paintSoundBtn();
+applyView();          // 버튼 딱지를 비워 두지 않는다. 실제 뷰는 start() 가 건다
 $('ver').textContent = VERSION;
 
 /* 편집은 맥에서만 한다 (D-015). 터치 기기에서는 진입 버튼을 감춘다 —
