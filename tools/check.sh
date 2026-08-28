@@ -10,6 +10,7 @@
 #   4. 항목 이름에 중복이 없는가
 #   5. 루틴 메타(label·short·tier·theme·view·items)가 갖춰져 있는가
 #   6. 뷰 방식 전환의 뼈대가 남아 있는가
+#   7. 목록 뷰의 줄 순서 — 끝낸 것이 아래로, 끝낸 순서대로 (D-025)
 #
 # 이 검사가 못 하는 것 — 전부 사람이 눌러야 판정된다
 #   · 소리가 실제로 나는가            (기기 볼륨·무음·자동재생 정책)
@@ -55,8 +56,9 @@ open(tmp + '/parts.js', 'w', encoding='utf-8').write(
 # 뷰의 기본값은 루틴이 들고 있으므로(5번에서 함께 본다) 여기서는 딱지가
 # 갖춰졌는지와 화면 쪽 뼈대가 남아 있는지를 본다.
 v = re.search(r"(const VIEW_LABEL = \{.*?\n\};\n)", js, re.S)
-if not v:
-    print("EXTRACT_FAIL: 뷰 딱지(VIEW_LABEL)를 찾지 못했습니다")
+o = re.search(r"(function listOrder\(count, doneIdx\) \{.*?\n\}\n)", js, re.S)
+if not (v and o):
+    print("EXTRACT_FAIL: 뷰 딱지(VIEW_LABEL) 또는 listOrder 를 찾지 못했습니다")
     sys.exit(1)
 has = {
     'btnView':  'id="btnView"' in src,
@@ -66,9 +68,13 @@ has = {
     'wired':    "$('btnView').addEventListener" in src,
     'applied':  'applyView()' in js,
     'noGlobal': 'routine.view' not in src,   # 전역 저장으로 되돌아가지 않았는가
+    'rowBtn':   'class="row-btn"' in src or "'row-btn'" in src,  # 줄마다 붙는 완료 단추
+    'rowWired': "$('runList').addEventListener" in src,
+    'uncheck':  'function uncheckItem' in js,   # 잘못 누른 것을 되살릴 수 있는가
 }
 open(tmp + '/view.js', 'w', encoding='utf-8').write(
-    v.group(1).replace('const ', 'var ') + '\nvar SRC_HAS = ' + json.dumps(has) + ';\n')
+    v.group(1).replace('const ', 'var ') + '\n' + o.group(1)
+    + '\nvar SRC_HAS = ' + json.dumps(has) + ';\n')
 PY
 [ $? -eq 0 ] || { red "✗ 본체에서 코드를 뽑아내지 못했습니다 (구조가 바뀌었나요?)"; exit 1; }
 
@@ -165,6 +171,23 @@ eq("한 항목 뷰 CSS 규칙",    SRC_HAS.cssOne,  true);
 eq("목록 뷰 CSS 규칙",       SRC_HAS.cssList, true);
 eq("전환 버튼이 연결됐다",   SRC_HAS.wired,   true);
 eq("시작할 때 뷰를 건다",    SRC_HAS.applied, true);
+eq("줄마다 완료 단추가 있다", SRC_HAS.rowBtn,   true);
+eq("줄 단추가 연결됐다",     SRC_HAS.rowWired, true);
+eq("완료를 되돌릴 수 있다",  SRC_HAS.uncheck,  true);
+
+/* ── 7. 목록 뷰의 줄 순서 (D-025) ──
+   목록 뷰는 순서와 무관하게 아무 줄이나 완료할 수 있고, 끝낸 것은 아래로
+   내려가 흐리게 뜬다. 그 순서를 정하는 것이 listOrder 다 — 상태를 안 쓰는
+   순수 함수라 화면 없이 돌려볼 수 있는 몇 안 되는 부분이다.
+   여기가 틀리면 훑는 도중 줄이 엉뚱한 데로 튀어 어디까지 했는지를 잃는다. */
+eq("아무것도 안 했을 때",   listOrder(5, []),           [0, 1, 2, 3, 4]);
+eq("가운데 하나를 끝내면",  listOrder(5, [2]),          [0, 1, 3, 4, 2]);
+eq("끝낸 순서대로 쌓인다",  listOrder(5, [3, 0]),       [1, 2, 4, 3, 0]);
+eq("거꾸로 다 끝내면",      listOrder(5, [4, 3, 2, 1, 0]), [4, 3, 2, 1, 0]);
+eq("차례대로 다 끝내면",    listOrder(3, [0, 1, 2]),    [0, 1, 2]);
+eq("빈 루틴",               listOrder(0, []),           []);
+eq("범위 밖 번호는 버린다", listOrder(3, [7]),          [0, 1, 2]);
+eq("줄 수는 늘 그대로",     listOrder(9, [5, 1]).length, 9);
 
 out.unshift(fail ? "실패 " + fail + "건 / 통과 " + pass + "건"
                  : "통과 " + pass + "건 / 실패 0건");
@@ -196,13 +219,13 @@ echo "$RESULT" | grep -v RESULT_
 
 case "$RESULT" in
   *RESULT_OK*)
-    green "✓ 2~6. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환"
+    green "✓ 2~7. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환 · 줄 순서"
     echo
     green "회귀 검사 통과"
     printf '\033[33m%s\033[0m\n' "다만 소리·레이아웃·터치는 이 검사가 판정하지 못합니다 — 손으로 확인하세요."
     exit 0 ;;
   *)
-    red "✗ 2~6 실패"
+    red "✗ 2~7 실패"
     echo
     red "회귀 검사 실패 — 로직을 되돌리거나, 의도한 변경이면 DECISIONS 에 근거를 남기고 검사를 고치세요."
     exit 1 ;;

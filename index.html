@@ -212,8 +212,8 @@ button {
                               #000 calc(100% - 14px), transparent 100%);
 }
 .run-row {
-  display: flex; gap: 12px; align-items: baseline;
-  padding: 13px 10px; border-bottom: 1px solid var(--line);
+  display: flex; gap: 12px; align-items: center;
+  padding: 10px; border-bottom: 1px solid var(--line);
   border-radius: 10px;
 }
 .run-num { flex: none; width: 2.1em; text-align: right;
@@ -225,19 +225,30 @@ button {
             font-variant-numeric: tabular-nums; }
 .run-side.reached { color: var(--accent); font-weight: 600; }
 
-/* 지금 할 것 — 목록 안에서도 어느 것이 지금인지가 한눈에 들어와야 한다 */
-.run-row[data-st="now"] {
-  background: var(--btn-bg); color: var(--btn-fg); border-bottom-color: transparent;
-}
-.run-row[data-st="now"] .run-name { font-weight: 700; font-size: 1.12rem; }
-.run-row[data-st="now"] .run-num,
-.run-row[data-st="now"] .run-note,
-.run-row[data-st="now"] .run-side { color: var(--btn-fg); opacity: .7; }
-.run-row[data-st="now"] .run-side.reached { color: var(--btn-fg); opacity: 1; font-weight: 700; }
+/* 아직인 것이 주인공이다 — 끝낸 것을 흐리게 하고 아래로 내린다 (D-025).
+   그 반대로 만들면 남은 일이 아니라 한 일이 눈에 들어온다 */
+.run-row[data-st="done"],
+.run-row[data-st="skip"] { opacity: .42; }
+.run-row[data-st="skip"] .run-name { text-decoration: line-through; }
 
-.run-row[data-st="todo"] { opacity: .45; }
-.run-row[data-st="done"] .run-name { color: var(--muted); }
-.run-row[data-st="skip"] .run-name { color: var(--muted); text-decoration: line-through; opacity: .6; }
+/* 줄마다 붙는 단추. 이것을 누르는 것이 곧 완료다 (D-025) */
+.row-btn {
+  flex: none; min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-size: .8rem; font-weight: 600;
+  transition: opacity .12s ease, background .12s ease;
+}
+.row-btn:active { opacity: .5; }
+.row-btn[data-act="done"] { border-color: var(--fg); color: var(--fg); }
+.row-btn[data-act="undo"] { min-width: 44px; padding: 0 10px; }
+
+/* 끝낸 것들이 시작되는 자리 */
+.run-divider {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--muted); font-size: .74rem; letter-spacing: .02em;
+  padding: 18px 10px 6px;
+}
+.run-divider::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--line); }
 
 /* ── 요약 화면 ─────────────────────────────────────────────────── */
 #screen-done { gap: 20px; }
@@ -813,9 +824,11 @@ function paintMore() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   8.5 뷰 방식 — 한 항목 ↔ 전체 목록 (D-024)
-       같은 상태를 다른 방식으로 그릴 뿐이다. 진행 로직(완료·건너뛰기·
-       이전·시간 재기)은 두 뷰가 완전히 같은 것을 쓴다.
+   8.5 뷰 방식 — 한 항목 ↔ 전체 목록 (D-024 · D-025)
+       두 뷰는 그리는 방식만 다른 것이 아니라 **끝내는 방식**이 다르다.
+         한 항목 뷰: 순서대로 하나씩. 지금 것을 끝내야 다음이 나온다
+         목록 뷰   : 순서와 무관. 줄마다 붙은 `완료` 를 아무 것이나 누른다
+       기록·시간 재기·소리는 그래도 한 벌을 같이 쓴다 (9번 구역).
    ═══════════════════════════════════════════════════════════════════ */
 /* 버튼에 적는 것은 '지금 뷰'가 아니라 '누르면 갈 뷰'다 — 눌렀을 때
    무엇이 되는지가 보여야 한다 */
@@ -834,72 +847,111 @@ function paintViewBtn() {
 }
 
 function applyView() {
+  const list = state.view === 'list';
   $('screen-run').dataset.view = state.view;
   paintViewBtn();
+
+  /* 아래 단추의 뜻이 뷰마다 다르다 (D-025).
+     목록 뷰에는 '지금 항목'이 없으니 `완료`·`건너뛰기` 가 가리킬 것이 없다.
+     남는 것은 "다 못 채우고 그만두기"뿐이라 `마치기` 로 바뀌고, 진짜 조작은
+     줄마다 붙은 단추로 옮겨간다. 그래서 큰 검은 단추(primary)도 아니다 —
+     눌러야 할 것이 아래에 있는 것처럼 보이면 안 된다 */
+  $('btnDone').className = list ? 'ghost' : 'primary';
+  $('btnDone').textContent = list ? '마치기' : '완료';
+  $('btnBack').textContent = list ? '↩ 되돌리기' : '← 이전';
+  $('btnSkip').style.display = list ? 'none' : '';
+}
+
+/* 줄 순서 — 아직인 것이 위, 끝낸 것은 아래로 내려가고 끝낸 순서로 쌓인다.
+   상태를 안 쓰는 순수 함수라 회귀 검사가 직접 돌려본다 (D-025).
+     count   : 항목 개수
+     doneIdx : 끝낸 항목 번호들, 끝낸 순서대로 */
+function listOrder(count, doneIdx) {
+  const todo = [], done = [];
+  for (let i = 0; i < count; i++) {
+    if (doneIdx.indexOf(i) < 0) todo.push(i);
+  }
+  doneIdx.forEach((i) => { if (i >= 0 && i < count) done.push(i); });
+  return todo.concat(done);
+}
+
+function listRow(i, rec) {
+  const item = state.items[i];
+  const row = document.createElement('div');
+  row.className = 'run-row';
+  row.dataset.st = rec ? (rec.skipped ? 'skip' : 'done') : 'todo';
+
+  const num = document.createElement('span');
+  num.className = 'run-num';
+  num.textContent = i + 1;
+
+  const body = document.createElement('div');
+  body.className = 'run-body';
+  const name = document.createElement('div');
+  name.className = 'run-name';
+  name.textContent = item.name;
+  body.append(name);
+  if (item.note) {
+    const note = document.createElement('div');
+    note.className = 'run-note';
+    note.textContent = item.note;
+    body.append(note);
+  }
+
+  const side = document.createElement('span');
+  side.className = 'run-side';
+  if (rec) side.textContent = rec.skipped ? '건너뜀' : fmt(rec.ms);
+  else if (item.minutes) side.textContent = item.minutes + '분';
+
+  /* 끝낸 줄의 `✓` 를 다시 누르면 되살아난다. 열네 줄을 훑다 잘못 누르는 일이
+     실제로 생기는데, `되돌리기` 는 마지막 것 하나만 되살리기 때문이다 */
+  const btn = document.createElement('button');
+  btn.className = 'row-btn';
+  btn.type = 'button';
+  btn.dataset.i = i;
+  btn.dataset.act = rec ? 'undo' : 'done';
+  btn.textContent = rec ? '✓' : '완료';
+  btn.setAttribute('aria-label', (rec ? '완료 취소 — ' : '완료 — ') + item.name);
+
+  row.append(num, body, side, btn);
+  return row;
 }
 
 function paintList() {
   const box = $('runList');
+  const keep = box.scrollTop;        // 다시 그려도 보던 자리를 잃지 않는다
   box.textContent = '';
-  state.items.forEach((item, i) => {
-    const rec = state.records[i];            // 지나온 항목만 기록이 있다
-    const row = document.createElement('div');
-    row.className = 'run-row';
-    row.dataset.st = i === state.idx ? 'now'
-                   : rec ? (rec.skipped ? 'skip' : 'done')
-                   : 'todo';
-    if (i === state.idx) row.id = 'runNow';
 
-    const num = document.createElement('span');
-    num.className = 'run-num';
-    num.textContent = i + 1;
+  const order = listOrder(state.items.length, state.records.map((r) => r.i));
+  let dividerPut = false;
 
-    const body = document.createElement('div');
-    body.className = 'run-body';
-    const name = document.createElement('div');
-    name.className = 'run-name';
-    name.textContent = item.name;
-    body.append(name);
-    if (item.note) {
-      const note = document.createElement('div');
-      note.className = 'run-note';
-      note.textContent = item.note;
-      body.append(note);
+  order.forEach((i) => {
+    const rec = recordOf(i);
+    if (rec && !dividerPut) {        // 끝낸 것이 처음 나오는 자리에 한 줄
+      dividerPut = true;
+      const d = document.createElement('div');
+      d.className = 'run-divider';
+      d.textContent = '완료 ' + state.records.length;
+      box.append(d);
     }
-
-    const side = document.createElement('span');
-    side.className = 'run-side';
-    if (rec) side.textContent = rec.skipped ? '건너뜀' : fmt(rec.ms);
-    else if (i === state.idx) side.id = 'runNowTime';   // tick() 이 채운다
-    else if (item.minutes) side.textContent = item.minutes + '분';
-
-    row.append(num, body, side);
-    box.append(row);
+    box.append(listRow(i, rec));
   });
-}
 
-/* 목록이 길면 지금 할 것이 화면 밖으로 나간다 — 늘 가운데로 끌어온다.
-   두 가지가 안 통해서 자리를 직접 계산해 넣는다 (크롬에서 확인) —
-   scrollIntoView 는 이 목록 안을 굴리지 않고(바깥이 overflow:hidden 이다),
-   scrollTo 의 behavior:'smooth' 는 아무 일도 하지 않는다. 부드럽게 밀리는
-   맛보다 지금 할 것이 반드시 보이는 쪽이 중요하므로 바로 옮긴다. */
-function scrollToNow() {
-  const box = $('runList');
-  const el = $('runNow');
-  if (!box || !el) return;
-  const want = el.offsetTop - (box.clientHeight - el.offsetHeight) / 2;
-  box.scrollTop = Math.max(0, Math.min(want, box.scrollHeight - box.clientHeight));
+  box.scrollTop = Math.max(0, Math.min(keep, box.scrollHeight - box.clientHeight));
 }
 
 /* 이 회차에만 걸리는 예외. 다음에 루틴을 시작하면 루틴의 기본값으로 돌아간다 */
 function toggleView() {
   state.view = state.view === 'one' ? 'list' : 'one';
   applyView();
-  if (state.screen === 'run' && state.view === 'list') {
-    paintList();
-    tick();          // 지금 항목의 시간을 빈칸으로 두지 않는다
-    scrollToNow();
+  if (state.screen !== 'run') return;
+  if (state.view === 'one') {
+    // 목록에서 순서와 무관하게 체크해 뒀을 수 있다 — 아직인 것 중 첫째로 간다
+    const next = firstUndone();
+    if (next < 0) return finish();
+    state.idx = next;
   }
+  render(false);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -921,13 +973,65 @@ function start(key) {
   state.idx = 0;
   state.records = [];
   state.runStart = Date.now();
+  state.itemStart = Date.now();
   show('run');
   keepAwake();
   render(false);
   if (!state.ticker) state.ticker = setInterval(tick, 250);
 }
 
+/* ── 기록 — 두 뷰가 같은 것을 쓴다 ──────────────────────────────────
+   기록 하나가 항목 하나를 끝낸 것이고, **끝낸 순서대로** 쌓인다.
+   `r.i` 가 항목 번호다 — 목록 뷰에서는 누른 순서가 항목 순서와 다르므로
+   번호를 따로 들고 있어야 한다 (D-025). 되돌리기는 맨 뒤부터. */
+function recordOf(i) {
+  return state.records.find((r) => r.i === i);
+}
+
+function firstUndone() {
+  for (let i = 0; i < state.items.length; i++) if (!recordOf(i)) return i;
+  return -1;
+}
+
+function complete(i, skipped) {
+  const item = state.items[i];
+  if (!item || recordOf(i)) return false;    // 두 번 끝내지 않는다
+  state.records.push({
+    i: i,
+    name: item.name,
+    ms: skipped ? null : Date.now() - state.itemStart,
+    skipped: skipped,
+  });
+  if (skipped) {
+    buzz(20);
+  } else {
+    ping();
+    buzz(30);
+  }
+  state.itemStart = Date.now();     // 다음 항목의 시간은 여기서부터 잰다
+  return true;
+}
+
+/* 위쪽 숫자와 진행바.
+   한 항목 뷰는 '지금 몇 번째', 목록 뷰는 '몇 개 끝냈나' 다 — 목록 뷰에는
+   지금 항목이 없으므로 항목별 시간 대신 전체 시간을 옆에 붙인다 */
+function paintProgress() {
+  const total = state.items.length;
+  const list = state.view === 'list';
+  const n = list ? state.records.length : state.idx;
+  $('cnt').textContent = list
+    ? n + ' / ' + total + '  ·  ' + fmt(Date.now() - state.runStart)
+    : (n + 1) + ' / ' + total;
+  $('barFill').style.width = (n / total * 100) + '%';
+}
+
 function render(animate) {
+  if (state.view === 'list') {
+    paintList();
+    paintProgress();
+    return;
+  }
+
   const item = state.items[state.idx];
   if (!item) return finish();
 
@@ -938,16 +1042,12 @@ function render(animate) {
     $('itemName').textContent = item.name;
     $('itemNote').textContent = item.note || '';
     $('itemNote').style.display = item.note ? '' : 'none';
-    $('cnt').textContent = (state.idx + 1) + ' / ' + state.items.length;
-    $('barFill').style.width = (state.idx / state.items.length * 100) + '%';
+    paintProgress();
     $('times').classList.remove('reached');
-    if (state.view === 'list') { paintList(); scrollToNow(); }
     tick();
   };
 
-  // 목록 뷰에서는 카드가 숨어 있어 넘어가는 애니메이션이 보이지 않는다.
-  // 220ms 를 기다릴 이유가 없으므로 바로 그린다
-  if (!animate || state.view === 'list') { paint(); return; }
+  if (!animate) { paint(); return; }
 
   const card = $('card');
   card.classList.add('leaving');
@@ -964,6 +1064,11 @@ function render(animate) {
 
 function tick() {
   if (state.screen !== 'run') return;
+
+  // 목록 뷰에는 지금 항목이 없다. 그래서 항목별 알림(@분)도 걸리지 않는다 —
+  // 목표 시간은 줄에 글자로만 뜬다 (D-025)
+  if (state.view === 'list') { paintProgress(); return; }
+
   const item = state.items[state.idx];
   if (!item) return;
 
@@ -986,42 +1091,39 @@ function tick() {
     }
   }
   $('times').textContent = text;
-
-  if (state.view === 'list') {
-    const el = $('runNowTime');
-    if (el) {
-      el.textContent = fmt(itemMs) + (item.minutes ? '  /  ' + item.minutes + '분' : '');
-      el.classList.toggle('reached', !!item.minutes && itemMs >= item.minutes * 60000);
-    }
-  }
 }
 
+/* ── 한 항목 뷰: 순서대로 ──────────────────────────────────────── */
 function advance(skipped) {
-  const item = state.items[state.idx];
-  if (!item) return;
-
-  state.records.push({
-    name: item.name,
-    ms: skipped ? null : Date.now() - state.itemStart,
-    skipped: skipped,
-  });
-
-  if (skipped) {
-    buzz(20);
-  } else {
-    ping();
-    buzz(30);
-  }
-
-  state.idx++;
-  if (state.idx >= state.items.length) return finish();
+  if (!complete(state.idx, skipped)) return;
+  const next = firstUndone();
+  if (next < 0) return finish();
+  state.idx = next;
   render(true);
 }
 
+/* ── 목록 뷰: 순서와 무관하게 (D-025) ──────────────────────────── */
+function checkItem(i) {
+  if (!complete(i, false)) return;
+  if (state.records.length >= state.items.length) return finish();
+  render(false);
+}
+
+function uncheckItem(i) {
+  const k = state.records.findIndex((r) => r.i === i);
+  if (k < 0) return;
+  state.records.splice(k, 1);
+  state.itemStart = Date.now();
+  render(false);
+}
+
+/* 되돌리기 — 마지막으로 끝낸 것을 되살린다. 두 뷰가 같은 것을 쓴다 */
 function back() {
-  if (state.idx === 0) return;
-  state.idx--;
-  state.records.pop();
+  const last = state.records.pop();
+  if (!last) return;
+  state.itemStart = Date.now();
+  if (state.view === 'list') return render(false);
+  state.idx = last.i;
   render(true);   // 되돌아간 항목의 시간은 0부터 다시 잰다
 }
 
@@ -1047,16 +1149,21 @@ function finish() {
 
   const box = $('summary');
   box.innerHTML = '';
-  state.records.forEach((r) => {
+  const line = (name, right, dim) => {
     const row = document.createElement('div');
-    if (r.skipped) row.className = 'skip';
+    if (dim) row.className = 'skip';
     const a = document.createElement('span');
-    a.textContent = r.name;
+    a.textContent = name;
     const b = document.createElement('span');
-    b.textContent = r.skipped ? '건너뜀' : fmt(r.ms);
+    b.textContent = right;
     row.append(a, b);
     box.append(row);
-  });
+  };
+
+  // 끝낸 순서대로. 목록 뷰에서는 이것이 곧 사용자가 누른 순서다
+  state.records.forEach((r) => line(r.name, r.skipped ? '건너뜀' : fmt(r.ms), r.skipped));
+  // 목록 뷰에서 다 채우지 않고 `마치기` 를 눌렀으면 남은 것이 있다 (D-025)
+  state.items.forEach((it, i) => { if (!recordOf(i)) line(it.name, '안 함', true); });
 
   show('done');
 }
@@ -1267,7 +1374,18 @@ $('morePick').addEventListener('click', pickHandler);
 $('btnMore').addEventListener('click', () => { paintMore(); show('more'); });
 $('btnMoreClose').addEventListener('click', () => { show('start'); paintStart(); });
 
-$('btnDone').addEventListener('click', () => advance(false));
+/* 목록 뷰에는 지금 항목이 없다 — 아래 단추는 '마치기'로 바뀐다 (D-025) */
+$('btnDone').addEventListener('click', () => {
+  if (state.view === 'list') finish(); else advance(false);
+});
+
+/* 줄마다 붙은 단추 하나로 완료·완료취소 둘 다 받는다 */
+$('runList').addEventListener('click', (e) => {
+  const b = e.target.closest('button.row-btn');
+  if (!b) return;
+  const i = Number(b.dataset.i);
+  if (b.dataset.act === 'done') checkItem(i); else uncheckItem(i);
+});
 $('btnSkip').addEventListener('click', () => advance(true));
 $('btnBack').addEventListener('click', back);
 $('btnHome').addEventListener('click', goHome);
@@ -1303,10 +1421,18 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (state.screen !== 'run') return;
+  if (e.key === 'v' || e.key === 'V') { e.preventDefault(); toggleView(); return; }
+
+  /* 목록 뷰에는 지금 항목이 없다. 엔터가 가리킬 것이 `마치기` 밖에 없는데,
+     스치듯 누른 키로 루틴이 끝나 버리면 안 된다 — 되돌리기만 남긴다 */
+  if (state.view === 'list') {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); back(); }
+    return;
+  }
+
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advance(false); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); advance(true); }
   else if (e.key === 'ArrowLeft')  { e.preventDefault(); back(); }
-  else if (e.key === 'v' || e.key === 'V') { e.preventDefault(); toggleView(); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════
