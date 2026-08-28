@@ -25,9 +25,21 @@
   --accent: #c2703a;  --btn-bg: #23211c;  --btn-fg: #fdfaf3;
   --pad: clamp(20px, 5vw, 48px);
 }
+/* 어두운 톤. ⚠ 아래 @media 블록과 **값이 똑같아야 한다** — 두 벌이 필요한 이유는
+   CSS 가 선택자와 미디어 질의를 한 규칙으로 묶지 못하기 때문이다.
+   어긋나면 기기 설정을 따를 때와 루틴이 지정할 때 색이 달라진다.
+   회귀 검사 8번이 두 벌을 글자 그대로 비교한다 (D-027) */
 body[data-theme="dark"] {
   --bg: #0d1015;  --fg: #e7e9ed;  --muted: #6d7783;  --line: #1e242c;
   --accent: #7fa8cc;  --btn-bg: #e7e9ed;  --btn-fg: #0d1015;
+}
+/* theme: 'auto' — 기기의 밝게/어둡게 설정을 그대로 따른다 (D-027).
+   맥의 시스템 설정, 안드로이드의 다크 테마가 여기로 들어온다 */
+@media (prefers-color-scheme: dark) {
+  body[data-theme="auto"] {
+    --bg: #0d1015;  --fg: #e7e9ed;  --muted: #6d7783;  --line: #1e242c;
+    --accent: #7fa8cc;  --btn-bg: #e7e9ed;  --btn-fg: #0d1015;
+  }
 }
 
 body {
@@ -337,7 +349,7 @@ button {
 .edit-actions .primary { flex: 1; min-height: 58px; }
 </style>
 </head>
-<body data-theme="light">
+<body data-theme="auto">
 
 <div id="app">
 
@@ -459,7 +471,10 @@ const VERSION = '2026-08-28';
       short   : 좁은 자리(진행 중 표시·편집 탭)에서 쓰는 짧은 이름
       tier    : 'main' → 시작 화면에 큰 버튼으로 바로 뜬다 (자주 쓰는 것)
                 'more' → ☰ 메뉴 안에 들어간다 (가끔 쓰는 것)
-      theme   : 'light' | 'dark'  — 이 루틴을 도는 동안의 화면 톤
+      theme   : 'auto' | 'light' | 'dark'  — 이 루틴을 도는 동안의 화면 톤
+                  'auto'  기기의 밝게/어둡게 설정을 따른다 (D-027). 넷 다 이것이다
+                  나머지 둘은 기기 설정을 무시하고 못박는다. 그럴 이유가
+                  생기면 쓰라고 남겨 둔 값이지 지금 쓰는 곳은 없다
       view    : 'one' | 'list'    — 항목을 어떻게 보여줄지의 기본값 (D-024)
                   'one'  실행 순서가 중요한 루틴. 한 번에 한 항목만 보인다
                   'list' 순서와 무관하게 빠르게 훑고 체크하는 루틴. 전부 보인다
@@ -475,7 +490,7 @@ const VERSION = '2026-08-28';
    ═══════════════════════════════════════════════════════════════════ */
 const ROUTINES = {
   morning: {
-    label: 'Morning Routine', short: '모닝', tier: 'main', theme: 'light',
+    label: 'Morning Routine', short: '모닝', tier: 'main', theme: 'auto',
     view: 'one',
     items: [
       { name: 'Get up early',                    note: '', minutes: null },
@@ -508,7 +523,7 @@ const ROUTINES = {
     ],
   },
   evening: {
-    label: 'Evening Routine', short: '이브닝', tier: 'main', theme: 'dark',
+    label: 'Evening Routine', short: '이브닝', tier: 'main', theme: 'auto',
     view: 'one',
     items: [
       { name: '입은 옷을 빨래통에 넣거나 옷걸이에 건다', note: '', minutes: null }, // [010]
@@ -544,7 +559,7 @@ const ROUTINES = {
 
   /* ⚠ 자리표시자 — 실제 목록을 받으면 items 를 통째로 교체한다 (B-27) */
   practice: {
-    label: '수련과 운동', short: '수련·운동', tier: 'main', theme: 'light',
+    label: '수련과 운동', short: '수련·운동', tier: 'main', theme: 'auto',
     view: 'one',
     items: [
       { name: '수련매트를 깔고 자리에 앉는다', note: '', minutes: null },
@@ -559,7 +574,7 @@ const ROUTINES = {
 
   /* 사용자가 준 실제 목록 (2026-08-28, B-28). 순서도 준 그대로다 */
   departure: {
-    label: '출국 전 체크리스트', short: '출국 전', tier: 'more', theme: 'light',
+    label: '출국 전 체크리스트', short: '출국 전', tier: 'more', theme: 'auto',
     view: 'list',
     items: [
       { name: '코골이방지 테이프',       note: '', minutes: null },
@@ -805,6 +820,38 @@ function show(name) {
   $('ver').style.display = (name === 'run' || name === 'edit') ? 'none' : '';
 }
 
+/* ── 화면 톤 (D-027) ──────────────────────────────────────────────
+   루틴의 theme 이 'auto' 면 색은 CSS 가 기기 설정을 보고 정한다.
+   그런데 홈 화면에 추가한 앱의 **위쪽 띠 색**만은 CSS 가 못 정하고
+   meta[theme-color] 로 정해지므로, 여기서 실제 색을 계산해 넣어 준다. */
+const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+const THEME_COLOR = { light: '#fdfaf3', dark: '#0d1015' };
+
+/* 지금 실제로 어느 톤으로 그려지고 있는가 */
+function resolvedTheme() {
+  const t = document.body.dataset.theme;
+  if (t === 'dark') return 'dark';
+  if (t === 'light') return 'light';
+  return darkQuery && darkQuery.matches ? 'dark' : 'light';   // 'auto'
+}
+
+function paintThemeColor() {
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute('content', THEME_COLOR[resolvedTheme()]);
+}
+
+function setTheme(theme) {
+  document.body.dataset.theme = theme;
+  paintThemeColor();
+}
+
+/* 루틴 도중에 기기 설정이 바뀔 수 있다 (해질녘 자동 전환 등).
+   색은 CSS 가 알아서 따라가지만 위쪽 띠는 여기서 맞춰 준다 */
+if (darkQuery) {
+  if (darkQuery.addEventListener) darkQuery.addEventListener('change', paintThemeColor);
+  else if (darkQuery.addListener) darkQuery.addListener(paintThemeColor);   // 옛 브라우저
+}
+
 /* 루틴 하나짜리 큰 버튼. 시작 화면과 ☰ 화면이 같은 것을 쓴다 */
 function routineButton(key, suggested) {
   const data = ROUTINES[key];
@@ -829,7 +876,7 @@ function routineButton(key, suggested) {
    정오를 넘겨 돌아왔는데 옛 제안이 남아 있으면 안 된다. */
 function paintStart() {
   const suggested = suggestKey();
-  document.body.dataset.theme = ROUTINES[suggested].theme;
+  setTheme(ROUTINES[suggested].theme);
   const box = $('mainPick');
   box.textContent = '';
   routineKeys('main').forEach((k) => box.append(routineButton(k, k === suggested)));
@@ -990,7 +1037,7 @@ function start(key) {
 
   wakeAudio();                      // 첫 조작에서 오디오를 깨워 둔다
   state.mode = key;
-  document.body.dataset.theme = data.theme;
+  setTheme(data.theme);
   // 뷰는 루틴마다 정해진다. 지난 회차에 손으로 바꿔 둔 것이 다음 루틴까지
   // 따라오면 안 된다 — 순서가 중요한 루틴에 다음 항목이 보여 버린다 (D-024)
   state.view = data.view;
@@ -1469,6 +1516,7 @@ document.addEventListener('keydown', (e) => {
 paintStart();
 paintSoundBtn();
 applyView();          // 버튼 딱지를 비워 두지 않는다. 실제 뷰는 start() 가 건다
+paintThemeColor();    // 홈 화면 앱의 위쪽 띠 색 (D-027)
 $('ver').textContent = VERSION;
 
 /* 편집은 맥에서만 한다 (D-015). 터치 기기에서는 진입 버튼을 감춘다 —

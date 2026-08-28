@@ -11,6 +11,7 @@
 #   5. 루틴 메타(label·short·tier·theme·view·items)가 갖춰져 있는가
 #   6. 뷰 방식 전환의 뼈대가 남아 있는가
 #   7. 목록 뷰의 줄 순서 — 끝낸 것이 아래로, 끝낸 순서대로 (D-025)
+#   8. 어두운 톤의 색 두 벌이 같은가 (기기 설정용 / 루틴 지정용, D-027)
 #
 # 이 검사가 못 하는 것 — 전부 사람이 눌러야 판정된다
 #   · 소리가 실제로 나는가            (기기 볼륨·무음·자동재생 정책)
@@ -60,7 +61,26 @@ o = re.search(r"(function listOrder\(count, doneIdx\) \{.*?\n\}\n)", js, re.S)
 if not (v and o):
     print("EXTRACT_FAIL: 뷰 딱지(VIEW_LABEL) 또는 listOrder 를 찾지 못했습니다")
     sys.exit(1)
+# ── 8. 어두운 톤 두 벌 (D-027) ──
+# CSS 가 선택자와 미디어 질의를 한 규칙으로 못 묶어서 같은 색을 두 번 적어야 한다.
+# 어긋나면 기기 설정을 따를 때와 루틴이 지정할 때 색이 달라진다 — 조용히 어긋나는
+# 종류라 글자 그대로 비교해 둔다.
+def _vars(block):
+    return sorted(x.strip() for x in re.split(r'[;\n]', block) if x.strip())
+
+d1 = re.search(r'body\[data-theme="dark"\] \{\n(.*?)\n\}', src, re.S)
+d2 = re.search(r'@media \(prefers-color-scheme: dark\) \{\n'
+               r'  body\[data-theme="auto"\] \{\n(.*?)\n  \}\n\}', src, re.S)
+
 has = {
+    'darkOnce':  bool(d1),
+    'darkAuto':  bool(d2),
+    'darkSame':  bool(d1 and d2) and _vars(d1.group(1)) == _vars(d2.group(1)),
+    'colorMeta': 'name="color-scheme"' in src and 'light dark' in src,
+    'themeMeta': 'name="theme-color"' in src and 'paintThemeColor' in js,
+    # CSS 와 JS 가 **같은 질의**를 봐야 한다. 한쪽만 바꾸면 화면은 밝은데
+    # 홈 화면 앱의 위쪽 띠만 어두운 식으로 어긋난다 (뒤집어 보다 실제로 나왔다)
+    'sameQuery': "matchMedia('(prefers-color-scheme: dark)')" in js,
     'btnView':  'id="btnView"' in src,
     'runList':  'id="runList"' in src,
     'cssOne':   '#screen-run[data-view="one"]' in src,
@@ -136,7 +156,7 @@ Object.keys(ROUTINES).forEach(function (k) {
   eq("메타 label " + k,  typeof r.label === "string" && r.label.length > 0, true);
   eq("메타 short " + k,  typeof r.short === "string" && r.short.length > 0, true);
   eq("메타 tier " + k,   r.tier === "main" || r.tier === "more", true);
-  eq("메타 theme " + k,  r.theme === "light" || r.theme === "dark", true);
+  eq("메타 theme " + k,  r.theme === "auto" || r.theme === "light" || r.theme === "dark", true);
   eq("메타 view " + k,   r.view === "one" || r.view === "list", true);
   eq("메타 items " + k,  Array.isArray(r.items) && r.items.length > 0, true);
 });
@@ -189,6 +209,22 @@ eq("빈 루틴",               listOrder(0, []),           []);
 eq("범위 밖 번호는 버린다", listOrder(3, [7]),          [0, 1, 2]);
 eq("줄 수는 늘 그대로",     listOrder(9, [5, 1]).length, 9);
 
+/* ── 8. 화면 톤 (D-027) ──
+   기기의 밝게/어둡게 설정을 따르려면 어두운 톤의 색을 두 벌 적어야 한다
+   (선택자용 · 미디어 질의용). 두 벌이 어긋나면 기기 설정을 따를 때와 루틴이
+   못박을 때 색이 달라지는데, 둘을 나란히 볼 일이 없어 조용히 어긋난다. */
+eq("어두운 톤 (루틴 지정용)", SRC_HAS.darkOnce, true);
+eq("어두운 톤 (기기 설정용)", SRC_HAS.darkAuto, true);
+eq("두 벌의 색이 같다",       SRC_HAS.darkSame, true);
+eq("color-scheme 메타",       SRC_HAS.colorMeta, true);
+eq("위쪽 띠 색을 맞춘다",     SRC_HAS.themeMeta, true);
+eq("CSS 와 JS 가 같은 질의",  SRC_HAS.sameQuery, true);
+/* 넷 다 기기 설정을 따르는 것이 지금의 결정이다 (D-027). 하나라도 못박혀 있으면
+   그 루틴만 기기 설정을 무시하게 되므로 눈에 띄게 실패시킨다 */
+Object.keys(ROUTINES).forEach(function (k) {
+  eq("기기 설정을 따른다 " + k, ROUTINES[k].theme, "auto");
+});
+
 out.unshift(fail ? "실패 " + fail + "건 / 통과 " + pass + "건"
                  : "통과 " + pass + "건 / 실패 0건");
 out.push(fail ? "RESULT_FAIL" : "RESULT_OK");
@@ -219,13 +255,13 @@ echo "$RESULT" | grep -v RESULT_
 
 case "$RESULT" in
   *RESULT_OK*)
-    green "✓ 2~7. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환 · 줄 순서"
+    green "✓ 2~8. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환 · 줄 순서 · 화면 톤"
     echo
     green "회귀 검사 통과"
     printf '\033[33m%s\033[0m\n' "다만 소리·레이아웃·터치는 이 검사가 판정하지 못합니다 — 손으로 확인하세요."
     exit 0 ;;
   *)
-    red "✗ 2~7 실패"
+    red "✗ 2~8 실패"
     echo
     red "회귀 검사 실패 — 로직을 되돌리거나, 의도한 변경이면 DECISIONS 에 근거를 남기고 검사를 고치세요."
     exit 1 ;;
