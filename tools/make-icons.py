@@ -5,8 +5,9 @@
 
 만드는 것
     icon-192.png, icon-512.png              캔버스를 꽉 채운다. 파비콘·iOS 홈 화면·
-                                            안드로이드 홈 화면(maskable). OS 가 마스크로
-                                            잘라내는 자리들이다
+                                            안드로이드 홈 화면·시작 화면(maskable).
+                                            OS 가 마스크로 잘라내는 자리들이라,
+                                            체크는 잘릴 것을 미리 계산해 줄여 그린다 (D-030)
     icon-inset-192.png, icon-inset-512.png  824/1024 둥근 사각형 + 투명 여백.
                                             매니페스트의 `any` — 안드로이드 시작 화면
                                             (스플래시)이 이것을 자른 데 없이 그대로 그린다
@@ -18,8 +19,11 @@
     (D-028). 애플 표준 비율은 1024 안의 824(=80.5%), 모서리 반경은 그 크기의 약 22.4% 다.
 """
 
+import hashlib
+import json
 import math
 import os
+import re
 import struct
 import zlib
 
@@ -68,12 +72,27 @@ def check_alpha(nx, ny):
     return max(0.0, min(1.0, (STROKE - d) / 0.008 + 0.5))
 
 
-# ── 웹·안드로이드용: 꽉 채운 정사각형 ────────────────────────────────
+# ── 꽉 채운 정사각형 — 마스크가 잘라내는 자리용 ──────────────────────
+#
+# 안드로이드는 이 그림을 **그대로 쓰지 않는다.** 적응형 아이콘 규격에 따라
+# 가운데 72/108(=66.7%)만 남기고 1.5배로 확대해 마스크 모양으로 자른다.
+# 그래서 체크를 캔버스 기준으로 그리면 화면에서는 1.5배로 부풀어 보인다.
+#
+# 실제로 그랬다 — 시작 화면에서 체크가 타일의 74% 를 차지했고, 이는 안드로이드가
+# 권장하는 67%(240dp 아이콘 안의 160dp)를 넘는다. 그래서 **미리 그 배율만큼
+# 줄여 둔다.** 줄이고 나면 마스크를 거친 뒤가 여백 있는 아이콘(맥·시작 화면)의
+# 체크와 같은 비율이 된다 — 어느 자리에서 봐도 같은 크기로 보인다는 뜻이다 (D-030).
+MASK_VISIBLE = 72 / 108.0
+
+
 def full_bleed(size):
     def rows(y, n):
         out = bytearray()
         for x in range(n):
-            r, g, b = blend(check_alpha((x + 0.5) / n, (y + 0.5) / n))
+            # 가운데를 기준으로 좌표를 넓혀 잡으면 그려지는 체크는 그만큼 작아진다
+            nx = 0.5 + ((x + 0.5) / n - 0.5) / MASK_VISIBLE
+            ny = 0.5 + ((y + 0.5) / n - 0.5) / MASK_VISIBLE
+            r, g, b = blend(check_alpha(nx, ny))
             out += bytes((r, g, b))
         return out
     return rows
@@ -108,6 +127,50 @@ def inset_icon(size):
     return rows
 
 
+# ── 매니페스트에 아이콘 지문을 찍는다 (D-029) ──────────────────────
+#
+# 크롬은 설치된 앱의 아이콘이 바뀌었는지를 **주소**로 먼저 판정한다. 파일 이름을
+# 그대로 두고 그림만 바꾸면 "안 바뀌었다"고 보고 넘어가, 기기에서는 옛 아이콘이
+# 계속 뜬다. 그래서 파일 내용의 지문을 `?v=` 로 붙여 **그림이 바뀌면 주소도 반드시
+# 바뀌게** 한다. 그림이 그대로면 지문도 그대로라 쓸데없는 갱신은 일어나지 않는다.
+
+SRC_RE = re.compile(r'"src":\s*"([A-Za-z0-9._-]+\.png)(?:\?v=[0-9a-f]+)?"')
+
+
+def fingerprint(name):
+    with open(os.path.join(HERE, name), 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()[:8]
+
+
+def stamp_manifest():
+    path = os.path.join(HERE, 'manifest.webmanifest')
+    with open(path, encoding='utf-8') as f:
+        before = f.read()
+
+    seen = []
+
+    def repl(m):
+        name = m.group(1)
+        v = fingerprint(name)
+        seen.append((name, v))
+        return f'"src": "{name}?v={v}"'
+
+    after = SRC_RE.sub(repl, before)
+
+    # 고친 것이 여전히 올바른 JSON 인지 반드시 확인한다 — 매니페스트가 깨지면
+    # 앱이 홈 화면에서 아예 앱처럼 뜨지 않는다
+    json.loads(after)
+
+    if after != before:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(after)
+
+    print('\n  매니페스트 아이콘 지문' + ('' if after != before else ' (바뀐 것 없음)'))
+    for name, v in seen:
+        print(f'    {name:<22} ?v={v}')
+    return after != before
+
+
 def main():
     for s in (192, 512):
         p = os.path.join(HERE, f'icon-{s}.png')
@@ -123,6 +186,8 @@ def main():
     p = os.path.join(HERE, 'mac', 'icon-mac-1024.png')
     n = write_png(p, 1024, inset_icon(1024), rgba=True)
     print(f'  mac/icon-mac-1024.png  {n:>9,} 바이트   (맥, 824/1024 여백 + 둥근 모서리)')
+
+    stamp_manifest()
 
 
 if __name__ == '__main__':

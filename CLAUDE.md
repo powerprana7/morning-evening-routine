@@ -21,11 +21,12 @@
 루틴 실행기 제작/
 ├── CLAUDE.md              ← 이 문서. 개요와 일하는 방식
 ├── index.html             ★ 본체. 이 파일 하나가 앱 전부다
-├── manifest.webmanifest   홈 화면에 추가했을 때 앱처럼 뜨게 하는 설정
+├── manifest.webmanifest   홈 화면에 추가했을 때 앱처럼 뜨게 하는 설정.
+│                          아이콘 주소의 `?v=` 지문은 손으로 고치지 않는다 (D-029)
 ├── sw.js                  오프라인 실행 (서비스 워커)
-├── icon-192.png           홈 화면 아이콘 · 파비콘 (꽉 채움 — OS 가 잘라내는 자리)
+├── icon-192.png           홈 화면 · 시작 화면 · 파비콘 (꽉 채움. 잘릴 몫을 빼고 그린다 — D-030)
 ├── icon-512.png
-├── icon-inset-192.png     시작 화면(스플래시) 아이콘 (여백 + 둥근 모서리 — D-028)
+├── icon-inset-192.png     자르지 않고 그리는 자리용 (여백 + 둥근 모서리 — D-028)
 ├── icon-inset-512.png
 ├── .nojekyll              GitHub Pages 가 Jekyll 로 건드리지 않게
 ├── mac/
@@ -35,7 +36,7 @@
 │                          .noindex 라 Spotlight·Alfred 가 색인하지 않는다 (D-021)
 ├── tools/
 │   ├── check.sh           회귀 검사
-│   ├── make-icons.py      아이콘 생성 (꽉 채운 것 + 여백 있는 것 + 맥용)
+│   ├── make-icons.py      아이콘 생성 + 매니페스트에 지문 찍기 (D-029)
 │   └── build-mac-app.sh   맥앱 빌드 (--install 로 /Applications 에 설치)
 └── docs/
     ├── STATUS.md          ★ 지금 상태 — 세션을 시작하면 이것부터 읽는다

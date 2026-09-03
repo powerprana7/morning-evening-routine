@@ -5,13 +5,33 @@
  *   이 앱에서 "전 기기가 같은 루틴을 본다"는 것이 오프라인보다 중요하므로,
  *   항상 새것을 먼저 받아보고 안 되면(비행기 모드 등) 캐시를 쓴다.
  */
-const CACHE = 'routine-v4';
-const ASSETS = ['./', './index.html', './manifest.webmanifest',
-                './icon-192.png', './icon-512.png',
-                './icon-inset-192.png', './icon-inset-512.png'];
+const CACHE = 'routine-v5';
+
+/* 미리 담아 둘 것. **아이콘 이름은 여기에 적지 않는다** — 매니페스트에서 읽는다 (D-029).
+ *   두 곳에 적어 두면 아이콘이 늘거나 이름이 바뀔 때 한쪽을 잊게 되고,
+ *   그 어긋남은 오프라인에서만 조용히 드러나 알아채기 어렵다.
+ *   매니페스트의 `src` 에는 지문(`?v=`)이 붙어 있으므로 그대로 가져다 쓴다. */
+const BASE = ['./', './index.html', './manifest.webmanifest'];
+
+async function assetList() {
+  try {
+    const res = await fetch('./manifest.webmanifest', { cache: 'reload' });
+    const icons = (await res.json()).icons || [];
+    return BASE.concat(icons.map((i) => './' + i.src));
+  } catch (e) {
+    return BASE;          // 매니페스트를 못 읽어도 설치는 된다
+  }
+}
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    assetList()
+      .then((list) => caches.open(CACHE).then((c) => c.addAll(list)))
+      // 하나라도 못 받으면 캐시는 비워 둔 채 넘어간다. 미리 담기에 실패했다고
+      // 서비스워커 설치까지 실패하면, 온라인인데도 앱이 갱신을 못 받게 된다
+      .catch(() => {})
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {

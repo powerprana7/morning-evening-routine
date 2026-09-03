@@ -12,6 +12,7 @@
 #   6. 뷰 방식 전환의 뼈대가 남아 있는가
 #   7. 목록 뷰의 줄 순서 — 끝낸 것이 아래로, 끝낸 순서대로 (D-025)
 #   8. 어두운 톤의 색 두 벌이 같은가 (기기 설정용 / 루틴 지정용, D-027)
+#   9. 배포 껍데기 — 아이콘 지문이 실제 파일과 맞는가 (자동 갱신 조건, D-029)
 #
 # 이 검사가 못 하는 것 — 전부 사람이 눌러야 판정된다
 #   · 소리가 실제로 나는가            (기기 볼륨·무음·자동재생 정책)
@@ -255,14 +256,77 @@ echo "$RESULT" | grep -v RESULT_
 
 case "$RESULT" in
   *RESULT_OK*)
-    green "✓ 2~8. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환 · 줄 순서 · 화면 톤"
-    echo
-    green "회귀 검사 통과"
-    printf '\033[33m%s\033[0m\n' "다만 소리·레이아웃·터치는 이 검사가 판정하지 못합니다 — 손으로 확인하세요."
-    exit 0 ;;
+    green "✓ 2~8. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환 · 줄 순서 · 화면 톤" ;;
   *)
     red "✗ 2~8 실패"
     echo
     red "회귀 검사 실패 — 로직을 되돌리거나, 의도한 변경이면 DECISIONS 에 근거를 남기고 검사를 고치세요."
     exit 1 ;;
 esac
+
+# ── 9. 배포 껍데기 — 아이콘이 저절로 갈아끼워지는 조건 (D-029) ─────────
+#
+# 자동 갱신은 "아이콘 주소가 바뀌었나"로 판정된다. 지문(`?v=`)이 빠지거나
+# 실제 파일과 어긋나면, 기기에서는 옛 아이콘이 계속 뜨는데 여기서는 아무 일도
+# 없어 보인다. 그 침묵이 이 검사가 막으려는 것이다.
+if ! python3 - "$HERE" <<'PY'
+import hashlib, json, os, re, sys
+
+HERE = sys.argv[1]
+fail = []
+
+mpath = os.path.join(HERE, 'manifest.webmanifest')
+try:
+    m = json.load(open(mpath, encoding='utf-8'))
+except Exception as e:
+    print(f'  매니페스트가 올바른 JSON 이 아니다: {e}')
+    sys.exit(1)
+
+icons = m.get('icons', [])
+if not icons:
+    fail.append('매니페스트에 아이콘이 하나도 없다')
+
+purposes = {i.get('purpose') for i in icons}
+for need, why in (('any', '시작 화면(스플래시)이 쓴다'), ('maskable', '홈 화면 아이콘이 쓴다')):
+    if need not in purposes:
+        fail.append(f'purpose "{need}" 아이콘이 없다 — {why}')
+
+for i in icons:
+    src = i.get('src', '')
+    m2 = re.fullmatch(r'([A-Za-z0-9._-]+\.png)\?v=([0-9a-f]{8})', src)
+    if not m2:
+        fail.append(f'{src!r} 에 지문이 없다 — tools/make-icons.py 를 돌려라')
+        continue
+    name, stamp = m2.group(1), m2.group(2)
+    fpath = os.path.join(HERE, name)
+    if not os.path.exists(fpath):
+        fail.append(f'{name} 파일이 없다')
+        continue
+    real = hashlib.sha256(open(fpath, 'rb').read()).hexdigest()[:8]
+    if real != stamp:
+        fail.append(f'{name} 지문이 어긋난다 (매니페스트 {stamp} / 실제 {real}) '
+                    '— tools/make-icons.py 를 돌려라')
+
+# 서비스워커가 아이콘 이름을 또 적어 두면 두 곳이 어긋난다 (D-029)
+sw = open(os.path.join(HERE, 'sw.js'), encoding='utf-8').read()
+body = re.sub(r'/\*.*?\*/', '', sw, flags=re.S)
+body = re.sub(r'//[^\n]*', '', body)
+if re.search(r'icon-[A-Za-z0-9-]*\.png', body):
+    fail.append('sw.js 가 아이콘 이름을 직접 적고 있다 — 매니페스트에서 읽어야 한다')
+
+for f in fail:
+    print('  ' + f)
+sys.exit(1 if fail else 0)
+PY
+then
+  red "✗ 9. 배포 껍데기 — 아이콘 자동 갱신 조건이 깨졌습니다"
+  echo
+  red "회귀 검사 실패 — 이대로 올리면 기기에서 아이콘이 저절로 안 바뀝니다."
+  exit 1
+fi
+green "✓ 9. 배포 껍데기 — 아이콘 지문·purpose·서비스워커"
+
+echo
+green "회귀 검사 통과"
+printf '\033[33m%s\033[0m\n' "다만 소리·레이아웃·터치는 이 검사가 판정하지 못합니다 — 손으로 확인하세요."
+exit 0
