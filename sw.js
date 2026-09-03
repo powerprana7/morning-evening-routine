@@ -5,9 +5,10 @@
  *   이 앱에서 "전 기기가 같은 루틴을 본다"는 것이 오프라인보다 중요하므로,
  *   항상 새것을 먼저 받아보고 안 되면(비행기 모드 등) 캐시를 쓴다.
  */
-const CACHE = 'routine-v3';
+const CACHE = 'routine-v4';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
-                './icon-192.png', './icon-512.png'];
+                './icon-192.png', './icon-512.png',
+                './icon-inset-192.png', './icon-inset-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

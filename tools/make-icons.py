@@ -4,14 +4,18 @@
     tools/make-icons.py
 
 만드는 것
-    icon-192.png, icon-512.png      웹·안드로이드용. 캔버스를 꽉 채운다
-                                    (PWA maskable 아이콘은 OS 가 알아서 둥글게 자른다)
-    mac/icon-mac-1024.png           맥용. 1024 캔버스 안에 824 둥근 사각형 + 여백
+    icon-192.png, icon-512.png              캔버스를 꽉 채운다. 파비콘·iOS 홈 화면·
+                                            안드로이드 홈 화면(maskable). OS 가 마스크로
+                                            잘라내는 자리들이다
+    icon-inset-192.png, icon-inset-512.png  824/1024 둥근 사각형 + 투명 여백.
+                                            매니페스트의 `any` — 안드로이드 시작 화면
+                                            (스플래시)이 이것을 자른 데 없이 그대로 그린다
+    mac/icon-mac-1024.png                   맥용. 같은 여백 도형
 
-왜 맥용만 따로인가 (D-019)
-    macOS 는 아이콘을 그대로 그린다. 꽉 채워 만들면 여백을 가진 다른 앱들보다
-    커 보이고 모서리도 각지게 나온다. 애플 표준 비율은 1024 안의 824(=80.5%),
-    모서리 반경은 그 크기의 약 22.4% 다.
+왜 셋인가 (D-019, D-028)
+    잘라내는 자리는 꽉 채워야 하고(여백을 주면 두 번 줄어든다), **그대로 그리는 자리는
+    여백을 직접 넣어야 한다.** 맥 독이 그랬고(D-019), 안드로이드 시작 화면도 같았다
+    (D-028). 애플 표준 비율은 1024 안의 824(=80.5%), 모서리 반경은 그 크기의 약 22.4% 다.
 """
 
 import math
@@ -75,8 +79,8 @@ def full_bleed(size):
     return rows
 
 
-# ── 맥용: 여백 + 둥근 사각형 + 투명 배경 ─────────────────────────────
-def mac_icon(size):
+# ── 여백 + 둥근 사각형 + 투명 배경 — 맥 독과 안드로이드 시작 화면이 함께 쓴다 ──
+def inset_icon(size):
     body = size * 824 / 1024.0          # 애플 표준 비율
     margin = (size - body) / 2.0
     radius = body * 0.2237              # 애플 표준 모서리 반경
@@ -108,11 +112,16 @@ def main():
     for s in (192, 512):
         p = os.path.join(HERE, f'icon-{s}.png')
         n = write_png(p, s, full_bleed(s), rgba=False)
-        print(f'  icon-{s}.png            {n:>9,} 바이트   (웹·안드로이드, 꽉 채움)')
+        print(f'  icon-{s}.png             {n:>9,} 바이트   (파비콘·maskable, 꽉 채움)')
+
+    for s in (192, 512):
+        p = os.path.join(HERE, f'icon-inset-{s}.png')
+        n = write_png(p, s, inset_icon(s), rgba=True)
+        print(f'  icon-inset-{s}.png       {n:>9,} 바이트   (시작 화면, 824/1024 여백)')
 
     os.makedirs(os.path.join(HERE, 'mac'), exist_ok=True)
     p = os.path.join(HERE, 'mac', 'icon-mac-1024.png')
-    n = write_png(p, 1024, mac_icon(1024), rgba=True)
+    n = write_png(p, 1024, inset_icon(1024), rgba=True)
     print(f'  mac/icon-mac-1024.png  {n:>9,} 바이트   (맥, 824/1024 여백 + 둥근 모서리)')
 
 
