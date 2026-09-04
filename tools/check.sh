@@ -14,6 +14,7 @@
 #   8. 어두운 톤의 색 두 벌이 같은가 (기기 설정용 / 루틴 지정용, D-027)
 #   9. 배포 껍데기 — 아이콘 지문이 실제 파일과 맞는가 (자동 갱신 조건, D-029)
 #  10. 폰에서 맥에 닿는 길로 보내는가 — 챗이 아니라 Code (D-031)
+#  11. 버전이 `날짜.번호` 꼴인가 (D-032)
 #
 # 이 검사가 못 하는 것 — 전부 사람이 눌러야 판정된다
 #   · 소리가 실제로 나는가            (기기 볼륨·무음·자동재생 정책)
@@ -123,6 +124,16 @@ has.update({
     'sendLabel':  "if (inMacApp || onPhone) $('btnEditCopy').textContent" in js,
     # 지시문이 "샌드박스에 복제해 고치고 완료라고 하기"를 못박는가
     'promptWarn': 'push 까지 끝나야 반영이다' in js and '완료' in js,
+})
+
+# ── 11. 버전 꼴 (D-032) ──
+# 하루에 여러 번 바꾸면서 번호를 안 올리면, 기기에 새 파일이 갔는지를 화면의 버전으로
+# 판단할 수 없다. 2026-08-28 과 09-04 에 실제로 걸렸다. 맨 날짜로 되돌아가는 것을 막는다.
+_v = re.search(r"const VERSION = '([^']*)'", js)
+has.update({
+    'verFound':  bool(_v),
+    'verShape':  bool(_v) and bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}\.[1-9]\d*', _v.group(1))),
+    'verShown':  "$('ver').textContent = VERSION" in js,
 })
 open(tmp + '/view.js', 'w', encoding='utf-8').write(
     v.group(1).replace('const ', 'var ') + '\n' + o.group(1)
@@ -274,6 +285,13 @@ eq("맥앱 직통 경로가 남아 있다",    SRC_HAS.macDirect, true);
 eq("버튼 딱지가 두 경로를 따른다",  SRC_HAS.sendLabel, true);
 eq("지시문이 샌드박스 작업을 막는다", SRC_HAS.promptWarn, true);
 
+/* ── 11. 버전 꼴 (D-032) ──
+   `YYYY-MM-DD.N`. 번호가 빠지면 하루에 여러 판이 같은 이름이 되어, 폰에 새 파일이
+   갔는지를 화면만 보고 못 가린다 — 두 번 걸렸던 구멍이다. */
+eq("버전이 있다",         SRC_HAS.verFound, true);
+eq("버전이 날짜.번호 꼴", SRC_HAS.verShape, true);
+eq("버전을 화면에 띄운다", SRC_HAS.verShown, true);
+
 out.unshift(fail ? "실패 " + fail + "건 / 통과 " + pass + "건"
                  : "통과 " + pass + "건 / 실패 0건");
 out.push(fail ? "RESULT_FAIL" : "RESULT_OK");
@@ -304,9 +322,9 @@ echo "$RESULT" | grep -v RESULT_
 
 case "$RESULT" in
   *RESULT_OK*)
-    green "✓ 2~8·10. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환 · 줄 순서 · 화면 톤 · 전달 경로" ;;
+    green "✓ 2~8·10·11. 시간 표기 · 텍스트 변환 · 중복 · 루틴 메타 · 뷰 전환 · 줄 순서 · 화면 톤 · 전달 경로 · 버전 꼴" ;;
   *)
-    red "✗ 2~8·10 실패"
+    red "✗ 2~8·10·11 실패"
     echo
     red "회귀 검사 실패 — 로직을 되돌리거나, 의도한 변경이면 DECISIONS 에 근거를 남기고 검사를 고치세요."
     exit 1 ;;
