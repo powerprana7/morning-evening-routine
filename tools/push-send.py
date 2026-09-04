@@ -24,6 +24,7 @@
 import base64
 import json
 import os
+import ssl
 import subprocess
 import sys
 import time
@@ -60,6 +61,29 @@ CONTACT = "https://powerprana7.github.io/morning-evening-routine/"
 
 def b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def ssl_context() -> ssl.SSLContext:
+    """인증서 꾸러미를 확실히 물린 컨텍스트를 만든다.
+
+    python.org 에서 받은 파이썬은 **맥의 인증서 저장소를 안 쓴다.** 자기 몫의
+    `cert.pem` 을 따로 두는데, `Install Certificates.command` 를 안 돌렸으면
+    그 파일이 아예 없다. 그러면 `CERTIFICATE_VERIFY_FAILED` 로 전부 막힌다.
+
+    2026-09-04 첫 발송에서 실제로 걸렸다 (기본 컨텍스트의 CA 가 0개였다).
+    맥마다 다르므로 **여기서 세어 보고 비었을 때만** certifi 로 갈아탄다 —
+    시스템 파이썬처럼 이미 갖춰진 곳에서는 그대로 쓴다."""
+    ctx = ssl.create_default_context()
+    if ctx.cert_store_stats().get("x509_ca", 0) > 0:
+        return ctx
+    try:
+        import certifi
+    except ImportError:
+        raise RuntimeError(
+            "이 파이썬에 인증서가 없습니다. 둘 중 하나를 하세요 — "
+            f"`{sys.executable} -m pip install certifi` 또는 "
+            "`/Applications/Python 3.x/Install Certificates.command` 실행")
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def log(msg: str) -> None:
@@ -220,7 +244,7 @@ def cmd_send(force: bool) -> int:
 
     req = urllib.request.Request(endpoint, data=b"", headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=20) as res:
+        with urllib.request.urlopen(req, timeout=20, context=ssl_context()) as res:
             log(f"보냈습니다 ({res.status})")
             return 0
     except urllib.error.HTTPError as e:
@@ -248,6 +272,12 @@ def cmd_status() -> int:
     else:
         print("폰 등록   : 없음  ← 폰에서 '알림 켜기' 필요")
     print("보낼 시각 :", ", ".join(f"{h:02d}:{m:02d}" for h, m in SCHEDULE))
+    # 인증서는 조용히 비어 있다가 보낼 때가 되어서야 터진다. 여기서 미리 만져 본다
+    try:
+        n = ssl_context().cert_store_stats().get("x509_ca", 0)
+        print(f"인증서    : 있음 ({n}개)")
+    except Exception as e:
+        print("인증서    : 없음 ←", e)
     if os.path.exists(LOG_PATH):
         print("\n최근 기록:")
         with open(LOG_PATH) as f:

@@ -15,6 +15,7 @@
 #   9. 배포 껍데기 — 아이콘 지문이 실제 파일과 맞는가 (자동 갱신 조건, D-029)
 #  10. 폰에서 맥에 닿는 길로 보내는가 — 챗이 아니라 Code (D-031)
 #  11. 버전이 `날짜.번호` 꼴인가 (D-032)
+#  12. 정해진 시각 알림 — 공개키 꼴·수신 처리·두 파일의 시각 일치·인증서·비밀키 혼입 (D-033)
 #
 # 이 검사가 못 하는 것 — 전부 사람이 눌러야 판정된다
 #   · 소리가 실제로 나는가            (기기 볼륨·무음·자동재생 정책)
@@ -435,6 +436,12 @@ if "get('routine')" not in app:
     fail.append('앱이 ?routine= 을 읽지 않는다 — 알림을 눌러도 그 루틴이 안 열린다')
 if 'history.replaceState' not in app:
     fail.append('?routine= 을 주소에서 지우지 않는다 — 갱신 때 루틴이 처음부터 다시 돈다')
+
+# 인증서를 물리지 않으면 python.org 판 파이썬에서 전부 막힌다 (2026-09-04 실제로 걸렸다)
+if 'def ssl_context' not in send:
+    fail.append('push-send.py 에 ssl_context 가 없다 — 인증서 없는 파이썬에서 전부 막힌다')
+if 'context=ssl_context()' not in send:
+    fail.append('보낼 때 ssl_context 를 안 쓴다 — CERTIFICATE_VERIFY_FAILED 로 막힌다')
 
 # ⚠ 시각이 두 곳에 적혀 있다. 어긋나면 조용히 안 온다
 py_times = set(re.findall(r'\((\d+),\s*(\d+)\)', send.split('SCHEDULE = [')[-1].split(']')[0]))

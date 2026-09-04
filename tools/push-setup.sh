@@ -33,6 +33,17 @@ PY="$(command -v python3 || true)"
 "$PY" -c 'import cryptography' 2>/dev/null || {
   echo "python 의 cryptography 모듈이 필요합니다:  $PY -m pip install cryptography"; exit 1; }
 
+# 인증서 꾸러미가 비어 있으면 지금 채운다.
+#   python.org 판 파이썬은 맥의 인증서 저장소를 안 쓴다. 그대로 두면 보낼 때
+#   CERTIFICATE_VERIFY_FAILED 로 전부 막힌다 (2026-09-04 실제로 걸렸다).
+if ! "$PY" -c 'import ssl,sys; sys.exit(0 if ssl.create_default_context().cert_store_stats()["x509_ca"] else 1)' 2>/dev/null; then
+  "$PY" -c 'import certifi' 2>/dev/null || {
+    echo "이 파이썬에 인증서가 없어 certifi 를 깝니다…"
+    "$PY" -m pip install --quiet --upgrade certifi || {
+      echo "certifi 설치 실패. 'Install Certificates.command' 를 직접 실행하세요"; exit 1; }
+  }
+fi
+
 mkdir -p "$DEST" "$HOME/Library/LaunchAgents"
 cp "$HERE/tools/push-send.py" "$DEST/push-send.py"
 chmod +x "$DEST/push-send.py"
