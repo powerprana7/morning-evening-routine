@@ -390,8 +390,10 @@ button {
       <code>제자리뛰기 100회 | 가자미근</code> → <code>|</code> 뒤는 작은 설명<br>
       <strong>여기서 고친 것은 이 기기에 저장되지 않는다.</strong>
       버튼을 누르면 <strong>클로드코드용 지시문까지 함께</strong> 만들어진다.
-      맥앱에서는 터미널이 열리며 바로 전달되고, <strong>폰에서는 공유 시트가 떠
-      클로드 앱으로 넘어간다</strong>. 데스크톱 브라우저에서는 복사만 된다.
+      맥앱에서는 터미널이 열리며 바로 전달되고, <strong>폰에서는 복사한 뒤
+      클로드 <code>Code</code> 화면이 열린다</strong> — 거기서 맥 세션에 붙여넣어야
+      맥에 닿는다. <strong>새 챗에 붙여넣으면 반영되지 않는다.</strong>
+      데스크톱 브라우저에서는 복사만 된다.
     </div>
 
     <div class="edit-body" id="editBody">
@@ -1362,6 +1364,9 @@ function buildPrompt() {
     'github.com/powerprana7/morning-evening-routine 의 index.html 에서',
     'ROUTINES.' + key + ' 의 items 를 아래 목록으로 통째로 교체하고 push 해줘.',
     '',
+    '⚠ push 까지 끝나야 반영이다. 임시 폴더에 새로 clone 해서 고치면 아무 데도 안 남는다.',
+    'push 를 못 하겠으면 커밋해 놓고 "완료"라고 하지 말고, 안 됐다고 분명히 말해줘.',
+    '',
     '형식: 한 줄에 항목 하나 · 줄 순서가 곧 실행 순서 · "|" 뒤는 보조 설명 · "@숫자"는 분 알림',
     '아래는 ' + label + ' ' + count + '개다. 반영 전에 개수가 맞는지 확인해줘.',
     '',
@@ -1375,19 +1380,20 @@ function buildPrompt() {
 const inMacApp = !!(window.webkit && window.webkit.messageHandlers
                     && window.webkit.messageHandlers.claudeCode);
 
-/* 폰인가 — 그렇다면 공유 시트로 클로드 앱에 넘길 수 있다 (D-031).
-   클로드 앱이 맥의 클로드코드 세션에 원격으로 붙어 있으므로, 폰에서 보낸 지시문도
-   결국 맥에서 실행된다. 데스크톱 브라우저에서는 쓰지 않는다 — 맥 공유 시트에는
-   클로드가 없어서 복사보다 나쁘고, 맥앱에는 이미 D-020 의 직통 경로가 있다.
+/* 폰인가 — 그렇다면 복사한 뒤 클로드 `Code` 화면을 열어 준다 (D-031 개정).
+   맥에 닿는 것은 앱의 **Code 쪽**뿐이다. 새 챗은 자기 샌드박스에 저장소를 새로 받아
+   고치고는 "완료"라고 답한다 — 맥도 Dropbox 도 건드리지 않고, 그 커밋은 사라진다.
+   그래서 공유 시트(첫 판)는 뺐다. 잘못된 곳으로 데려가면서 그렇다고 말해주지 않는다.
    판단이 안 되면 복사 쪽으로 — 확실히 되는 길을 남긴다. */
-const canShare = !!navigator.share && (function () {
+const CODE_URL = 'https://claude.ai/code';
+const onPhone = (function () {
   try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
 })();
 
 /* 지금 보고 있는 쪽을 지시문과 함께 클립보드로. 저장은 하지 않는다 (D-015) —
    이 화면은 "고쳐서 복사해 가는 곳"이지 이 기기에 남기는 곳이 아니다.
-   전달은 기기마다 다른 길로 간다 — 맥앱은 터미널 직통(D-020), 폰은 공유 시트(D-031),
-   데스크톱 브라우저는 복사. 어느 길이든 클립보드에는 늘 넣어 둔다. */
+   전달은 기기마다 다른 길로 간다 — 맥앱은 터미널 직통(D-020), 폰은 복사 + `Code` 화면
+   열기(D-031), 데스크톱 브라우저는 복사. 어느 길이든 클립보드에는 늘 넣어 둔다. */
 function copyEditor() {
   stashEditor();
   const el = $('editStatus');
@@ -1405,23 +1411,23 @@ function copyEditor() {
     return;
   }
 
-  /* 폰 — 공유 시트로 클로드 앱에 바로 넘긴다 (D-031).
-     클립보드에도 **먼저** 넣어 둔다. 순서가 중요하다 —
-     ① 공유 시트가 뜨면 문서가 초점을 잃어 그 뒤로는 클립보드 쓰기가 막힌다
-     ② 공유를 취소하거나 목록에 클로드가 없어도 붙여넣을 길이 남는다 */
-  if (canShare) {
-    toClipboard(prompt).catch(() => {});
-    navigator.share({ text: prompt }).then(() => {
+  /* 폰 — 복사한 뒤 클로드 `Code` 화면을 연다 (D-031 개정).
+     클립보드가 **먼저**다. 순서가 중요하다 —
+     ① 새 창으로 넘어가면 문서가 초점을 잃어 그 뒤로는 클립보드 쓰기가 막힌다
+     ② 화면이 안 열려도(앱이 링크를 안 가져가도) 붙여넣을 길은 남아 있어야 한다
+     새 창으로 연다 — 이 창을 떠나면 방금 고친 텍스트가 날아간다. */
+  if (onPhone) {
+    toClipboard(prompt).then(() => {
       el.classList.remove('warn');
-      el.textContent = '클로드로 보냈습니다 (' + n + '개) — 복사도 해 뒀습니다';
+      el.textContent = '복사했습니다 (' + n + '개) — 클로드 Code 의 맥 세션에 붙여넣으세요';
       ping();
       setTimeout(paintEditStatus, 3200);
     }, () => {
-      // 취소했거나 공유가 막혔다. 복사는 이미 끝났으므로 그것을 알린다
-      el.classList.remove('warn');
-      el.textContent = '복사했습니다 (' + n + '개 + 지시문) — 클로드에 그대로 붙여넣으세요';
+      el.classList.add('warn');
+      el.textContent = '클립보드가 막혔습니다 — 본문을 직접 복사하세요';
       setTimeout(paintEditStatus, 3200);
     });
+    try { window.open(CODE_URL, '_blank', 'noopener'); } catch (e) {}
     return;
   }
 
@@ -1462,7 +1468,7 @@ $('editText').addEventListener('focus', () => $('editBody').classList.add('focus
 $('editText').addEventListener('blur',  () => $('editBody').classList.remove('focused'));
 window.addEventListener('resize', () => { if (state.screen === 'edit') paintGutter(); });
 $('btnEditCopy').addEventListener('click', copyEditor);
-if (inMacApp || canShare) $('btnEditCopy').textContent = '클로드코드로 보내기';
+if (inMacApp || onPhone) $('btnEditCopy').textContent = '클로드코드로 보내기';
 $('btnEditCancel').addEventListener('click', () => {
   show('start');
   paintStart();

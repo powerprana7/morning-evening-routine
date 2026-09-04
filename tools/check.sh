@@ -13,7 +13,7 @@
 #   7. 목록 뷰의 줄 순서 — 끝낸 것이 아래로, 끝낸 순서대로 (D-025)
 #   8. 어두운 톤의 색 두 벌이 같은가 (기기 설정용 / 루틴 지정용, D-027)
 #   9. 배포 껍데기 — 아이콘 지문이 실제 파일과 맞는가 (자동 갱신 조건, D-029)
-#  10. 안드로이드에서도 클로드코드로 보낼 수 있는가 (D-031)
+#  10. 폰에서 맥에 닿는 길로 보내는가 — 챗이 아니라 Code (D-031)
 #
 # 이 검사가 못 하는 것 — 전부 사람이 눌러야 판정된다
 #   · 소리가 실제로 나는가            (기기 볼륨·무음·자동재생 정책)
@@ -95,25 +95,34 @@ has = {
     'uncheck':  'function uncheckItem' in js,   # 잘못 누른 것을 되살릴 수 있는가
 }
 
-# ── 10. 안드로이드 전달 경로 (D-031) ──
-# 셋 다 "조용히 사라지는" 종류다. 진입 버튼을 다시 감추거나 공유 호출이 빠져도
-# 맥에서는 아무 증상이 없고, 폰을 켜 봐야만 없어진 것을 안다.
-_share_i = js.find('if (canShare) {')
-_call_i  = js.find('navigator.share(')
-_clip_i  = js.find('toClipboard(', _share_i) if _share_i >= 0 else -1
+# ── 10. 폰이 맥에 닿는 길로 가는가 (D-031) ──
+# 전부 "조용히 사라지는" 종류다. 폰 경로가 어긋나도 맥에서는 아무 증상이 없다.
+# 특히 공유 시트로 되돌아가는 것을 막는다 — 그것은 새 챗으로 떨어져서, 맥을 건드리지
+# 못한 채 "완료했다"고 답한다. 실패보다 나쁘다.
+_phone_i = js.find('if (onPhone) {')
+_open_i  = js.find('window.open(CODE_URL', _phone_i) if _phone_i >= 0 else -1
+_clip_i  = js.find('toClipboard(', _phone_i) if _phone_i >= 0 else -1
 has.update({
     # 진입 버튼을 어떤 기기에서도 감추지 않는가 (옛 pointer:fine 게이트가 되살아났나)
     'editShown':  "$('btnEdit').style.display" not in js,
-    'shareCall':  _call_i >= 0,
-    # 폰에서만 쓴다 — 데스크톱 브라우저에서 맥 공유 시트가 뜨면 복사보다 나쁘다
-    'shareGate':  'const canShare' in js and "matchMedia('(pointer: coarse)')" in js,
-    # 클립보드가 공유보다 **먼저** 와야 한다. 공유 시트가 뜨면 초점을 잃어 그 뒤로는
-    # 클립보드 쓰기가 막히고, 취소했을 때 붙여넣을 것이 아무것도 남지 않는다
-    'shareCopy':  0 <= _clip_i < _call_i,
-    # 맥앱 직통 경로(D-020)를 공유로 갈아치우지 않았는가
+    # 공유 시트로 되돌아가지 않았는가
+    'noShare':    'navigator.share' not in js,
+    # 여는 곳이 챗이 아니라 Code 인가
+    'codeUrl':    "const CODE_URL = 'https://claude.ai/code'" in js,
+    'opensCode':  _open_i >= 0,
+    # 폰에서만 연다 — 데스크톱에서 창이 뜨면 방해만 된다
+    'phoneGate':  'const onPhone' in js and "matchMedia('(pointer: coarse)')" in js,
+    # 클립보드가 창 열기보다 **먼저** 와야 한다. 초점을 잃으면 그 뒤로는 쓰기가 막히고,
+    # 앱이 링크를 안 가져갈 때 붙여넣을 것이 아무것도 남지 않는다
+    'clipFirst':  0 <= _clip_i < _open_i,
+    # 이 창을 떠나면 방금 고친 텍스트가 날아간다 — 반드시 새 창으로
+    'newTab':     "'_blank'" in js,
+    # 맥앱 직통 경로(D-020)를 갈아치우지 않았는가
     'macDirect':  'messageHandlers.claudeCode.postMessage' in js,
     # 버튼 딱지가 두 경로 다 따라오는가
-    'sendLabel':  "if (inMacApp || canShare) $('btnEditCopy').textContent" in js,
+    'sendLabel':  "if (inMacApp || onPhone) $('btnEditCopy').textContent" in js,
+    # 지시문이 "샌드박스에 복제해 고치고 완료라고 하기"를 못박는가
+    'promptWarn': 'push 까지 끝나야 반영이다' in js and '완료' in js,
 })
 open(tmp + '/view.js', 'w', encoding='utf-8').write(
     v.group(1).replace('const ', 'var ') + '\n' + o.group(1)
@@ -248,16 +257,22 @@ Object.keys(ROUTINES).forEach(function (k) {
   eq("기기 설정을 따른다 " + k, ROUTINES[k].theme, "auto");
 });
 
-/* ── 10. 안드로이드에서도 클로드코드로 보낼 수 있는가 (D-031) ──
-   안드로이드 클로드 앱이 맥의 클로드코드에 원격으로 붙으면서, 폰에서 고친 순서를
-   보낼 길이 생겼다. 길은 셋으로 갈린다 — 맥앱은 직통(D-020), 폰은 공유 시트,
-   데스크톱 브라우저는 복사. 어느 하나가 빠져도 그 기기에서만 조용히 안 된다. */
-eq("편집 진입을 감추지 않는다",   SRC_HAS.editShown, true);
-eq("공유를 호출한다",             SRC_HAS.shareCall, true);
-eq("공유는 폰에서만",             SRC_HAS.shareGate, true);
-eq("복사가 공유보다 먼저",        SRC_HAS.shareCopy, true);
-eq("맥앱 직통 경로가 남아 있다",  SRC_HAS.macDirect, true);
-eq("버튼 딱지가 두 경로를 따른다", SRC_HAS.sendLabel, true);
+/* ── 10. 폰이 맥에 닿는 길로 가는가 (D-031) ──
+   길은 셋이다 — 맥앱은 터미널 직통(D-020), 폰은 복사 + `Code` 화면, 데스크톱
+   브라우저는 복사. 폰만 새로 생겼고, 폰만 틀린 곳으로 갈 수 있다.
+   첫 판의 공유 시트는 새 챗으로 떨어졌다. 챗 클로드는 자기 샌드박스에 저장소를
+   새로 받아 고치고 "완료"라고 답한다 — 맥에는 아무 일도 일어나지 않는데 화면에는
+   성공이라고 적힌다. 되돌아가지 않게 못박는다. */
+eq("편집 진입을 감추지 않는다",     SRC_HAS.editShown, true);
+eq("공유 시트로 되돌아가지 않았다", SRC_HAS.noShare,   true);
+eq("여는 곳이 Code 다",             SRC_HAS.codeUrl,   true);
+eq("실제로 연다",                   SRC_HAS.opensCode, true);
+eq("여는 것은 폰에서만",            SRC_HAS.phoneGate, true);
+eq("복사가 창 열기보다 먼저",       SRC_HAS.clipFirst, true);
+eq("새 창으로 연다",                SRC_HAS.newTab,    true);
+eq("맥앱 직통 경로가 남아 있다",    SRC_HAS.macDirect, true);
+eq("버튼 딱지가 두 경로를 따른다",  SRC_HAS.sendLabel, true);
+eq("지시문이 샌드박스 작업을 막는다", SRC_HAS.promptWarn, true);
 
 out.unshift(fail ? "실패 " + fail + "건 / 통과 " + pass + "건"
                  : "통과 " + pass + "건 / 실패 0건");
