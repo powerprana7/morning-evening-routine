@@ -137,7 +137,28 @@ button {
 .start-actions {
   flex: none; width: 100%; max-width: 560px; margin: 0 auto;
   display: flex; gap: 4px; justify-content: center;
+  /* 알림 단추가 늘어 셋이 됐다 (D-033). 폭 360px 짜리 폰에서 가로로 안 들어가
+     넘치므로 줄을 바꾸게 둔다. 넓은 화면에서는 그대로 한 줄이다 */
+  flex-wrap: wrap;
 }
+
+/* ── 알림 등록 안내 (D-033) ────────────────────────────────────
+   폰에서 알림을 켠 뒤, 맥에 등록할 명령을 보여 주는 자리. 평소에는 감춰 둔다. */
+.notify-box {
+  flex: none; width: 100%; max-width: 560px; margin: 12px auto 0;
+  display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+}
+.notify-box[hidden] { display: none; }
+.notify-msg { font-size: .84rem; line-height: 1.5; color: var(--muted); }
+.notify-cmd {
+  width: 100%; box-sizing: border-box; resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .72rem; line-height: 1.4;
+  color: var(--fg); background: transparent;
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px;
+}
+.notify-actions { display: flex; gap: 4px; justify-content: flex-end; }
 
 /* ── 가끔 하는 루틴 화면 ───────────────────────────────────────── */
 #screen-more { gap: 16px; max-width: 560px; width: 100%; margin: 0 auto; }
@@ -363,7 +384,18 @@ button {
     <div class="pick-list middle" id="mainPick"></div>
     <div class="start-actions">
       <button class="ghost" id="btnSound">🔔 소리 켬</button>
+      <button class="ghost" id="btnNotify" hidden>⏰ 알림</button>
       <button class="ghost" id="btnEdit">✎ 루틴 편집</button>
+    </div>
+    <!-- 알림을 켠 뒤 맥에 등록할 명령이 여기에 뜬다 (D-033).
+         평소에는 감춰 둔다 — 시작 화면은 루틴을 고르는 자리다 -->
+    <div class="notify-box" id="notifyBox" hidden>
+      <div class="notify-msg" id="notifyMsg"></div>
+      <textarea class="notify-cmd" id="notifyCmd" readonly rows="3"></textarea>
+      <div class="notify-actions">
+        <button class="ghost" id="btnNotifyCopy">명령 복사</button>
+        <button class="ghost" id="btnNotifyClose">닫기</button>
+      </div>
     </div>
   </section>
 
@@ -468,7 +500,13 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-09-04.4';
+const VERSION = '2026-09-04.5';
+
+/* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
+   짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
+   비밀키가 여기 들어오면 안 된다. 이 값은 공개되라고 있는 것이라 괜찮다. */
+const VAPID_PUBLIC =
+  'BMf9UGSyGJU_KQ_MLE6H3d4kGSe1Hb8_b4RPf30hcp-_E6xI-vj5VrU88VHCSpvHc1JvzfnWhJVCPumP1GEN5_A';
 
 /* ═══════════════════════════════════════════════════════════════════
    2. 루틴 기본 목록 (D-006, D-023)
@@ -1551,7 +1589,128 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════
-   11. 시작
+   11. 정해진 시각 알림 (D-033)
+
+   7:30 과 20:30 에 폰으로 알림이 온다. **보내는 것은 맥이다** — GitHub Pages 는
+   정적 호스팅이라 스스로 시각을 지킬 수 없다. 이 앱이 하는 일은 둘뿐이다.
+     ① 폰의 알림 주소를 받아서, 맥에 등록할 명령을 만들어 보여 준다
+     ② 알림을 누르면 그 루틴을 연다 (`?routine=` · 서비스워커 메시지)
+
+   `https` 가 아니면 단추 자체를 감춘다. 맥에서 `file://` 로 열어 쓰는 길을
+   막지 않기 위해서다 — 알림이 없어도 앱은 온전하다 (CLAUDE.md 3번).
+   ═══════════════════════════════════════════════════════════════════ */
+
+const notifyOK = ('serviceWorker' in navigator) && ('PushManager' in window)
+                 && ('Notification' in window) && location.protocol === 'https:';
+
+/* 공개키는 base64url 글자열이다. 브라우저는 날바이트를 요구한다 */
+function keyBytes(s) {
+  const pad = '='.repeat((4 - (s.length % 4)) % 4);
+  const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+function paintNotifyBtn(sub) {
+  const b = $('btnNotify');
+  if (!notifyOK) { b.hidden = true; return; }
+  b.hidden = false;
+  if (Notification.permission === 'denied') b.textContent = '⏰ 알림 막힘';
+  else if (sub) b.textContent = '⏰ 알림 켬';
+  else b.textContent = '⏰ 알림 끔';
+}
+
+function showNotifyBox(msg, cmd) {
+  $('notifyMsg').textContent = msg;
+  $('notifyCmd').value = cmd || '';
+  $('notifyCmd').hidden = !cmd;
+  $('btnNotifyCopy').hidden = !cmd;
+  $('notifyBox').hidden = false;
+}
+
+/* 폰의 알림 주소를 맥에 넣는 명령. **경로를 적지 않는다** — 저장소를 어디에
+   내려받았든 그대로 듣게 하기 위해서다. 등록은 파일 하나 쓰는 것이 전부다. */
+function registerCommand(sub) {
+  const json = JSON.stringify(sub.toJSON ? sub.toJSON() : sub);
+  return "mkdir -p ~/.routine-push && printf '%s' '" + json +
+         "' > ~/.routine-push/subscription.json && chmod 600 ~/.routine-push/subscription.json";
+}
+
+async function turnOnNotify() {
+  if (Notification.permission === 'denied') {
+    showNotifyBox('브라우저가 이 사이트의 알림을 막고 있습니다. ' +
+                  '주소창 옆 자물쇠에서 알림을 허용해 주세요.', '');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') { paintNotifyBtn(null); return; }
+
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,                    // 안드로이드에서 필수다
+      applicationServerKey: keyBytes(VAPID_PUBLIC),
+    });
+  }
+  paintNotifyBtn(sub);
+
+  const cmd = registerCommand(sub);
+  toClipboard(cmd).then(
+    () => showNotifyBox('알림 주소를 복사했습니다. 맥의 클로드코드에 붙여넣으면 ' +
+                        '7:30 과 20:30 에 알림이 옵니다.', cmd),
+    () => showNotifyBox('아래 명령을 맥의 클로드코드에 붙여넣으세요. ' +
+                        '7:30 과 20:30 에 알림이 옵니다.', cmd)
+  );
+}
+
+if (notifyOK) {
+  paintNotifyBtn(null);        // 단추를 먼저 띄운다. 실제 상태는 아래에서 맞춘다
+  $('btnNotify').addEventListener('click', turnOnNotify);
+  $('btnNotifyClose').addEventListener('click', () => { $('notifyBox').hidden = true; });
+  $('btnNotifyCopy').addEventListener('click', () => {
+    toClipboard($('notifyCmd').value).then(
+      () => { $('btnNotifyCopy').textContent = '복사됨'; },
+      () => { $('btnNotifyCopy').textContent = '복사 실패'; }
+    );
+  });
+  // 이미 켜 둔 상태인지 확인해 단추 딱지를 맞춘다
+  navigator.serviceWorker.ready
+    .then((reg) => reg.pushManager.getSubscription())
+    .then(paintNotifyBtn)
+    .catch(() => paintNotifyBtn(null));
+}
+
+/* 알림을 눌러서 들어온 경우 그 루틴을 바로 연다.
+
+   ⚠ 주소에서 `?routine=` 을 지우고 시작한다. 서비스워커가 새 판을 받으면
+   `location.reload()` 가 도는데(D-017), 표시가 남아 있으면 **루틴을 도는 중에
+   처음부터 다시 시작해 버린다.** */
+function openFromNotification(key) {
+  if (!ROUTINES[key]) return;
+  if (state.screen === 'run') return;   // 이미 돌고 있으면 건드리지 않는다
+  start(key);
+}
+
+(function () {
+  let key = null;
+  try { key = new URLSearchParams(location.search).get('routine'); } catch (e) { key = null; }
+  if (key) {
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* 무시 */ }
+    // 화면이 다 그려진 뒤에 연다
+    setTimeout(() => openFromNotification(key), 0);
+  }
+})();
+
+/* 앱이 이미 떠 있는 채로 알림을 누른 경우 — 서비스워커가 알려 준다 */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const d = e.data || {};
+    if (d.type === 'open-routine') openFromNotification(d.routine);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   12. 시작
    ═══════════════════════════════════════════════════════════════════ */
 // 시작 화면을 그린다. 정오를 경계로 하나를 제안해 두지만 누르는 것은 사용자다.
 paintStart();

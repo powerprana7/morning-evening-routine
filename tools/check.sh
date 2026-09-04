@@ -392,6 +392,78 @@ then
 fi
 green "✓ 9. 배포 껍데기 — 아이콘 지문·purpose·서비스워커"
 
+# ── 12. 정해진 시각 알림 (D-033) ──────────────────────────────────────
+# 여기서 어긋나는 것은 **전부 조용히 실패한다.** 알림이 안 오는 것은 아무 소리도
+# 안 나는 고장이라 몇 주씩 모르고 지나간다. 특히 시각이 두 파일에 적혀 있는 것
+# (`push-send.py` 의 SCHEDULE · `push-setup.sh` 의 StartCalendarInterval)이
+# 위험하다 — 한쪽만 고치면 launchd 는 깨우는데 스크립트가 안 보낸다.
+if ! python3 - "$HERE" <<'PY'
+import base64, os, re, sys
+HERE = sys.argv[1]
+fail, warn = [], []
+
+app  = open(os.path.join(HERE, 'index.html'), encoding='utf-8').read()
+sw   = open(os.path.join(HERE, 'sw.js'), encoding='utf-8').read()
+send = open(os.path.join(HERE, 'tools/push-send.py'), encoding='utf-8').read()
+setup= open(os.path.join(HERE, 'tools/push-setup.sh'), encoding='utf-8').read()
+
+# 앱이 든 공개키가 규격에 맞는가 — 65바이트 비압축 P-256 점, 0x04 로 시작
+m = re.search(r"const VAPID_PUBLIC =\s*\n?\s*'([A-Za-z0-9_-]+)'", app)
+if not m:
+    fail.append('index.html 에 VAPID_PUBLIC 이 없다 — 알림을 켤 수 없다')
+else:
+    raw = base64.urlsafe_b64decode(m.group(1) + '=' * (-len(m.group(1)) % 4))
+    if len(raw) != 65 or raw[0] != 4:
+        fail.append(f'VAPID_PUBLIC 이 공개키 꼴이 아니다 ({len(raw)}바이트)')
+
+# 비밀키는 절대 저장소에 들어오면 안 된다 (이 저장소만 Public — CLAUDE.md 7번)
+for name in ('index.html', 'sw.js', 'tools/push-send.py', 'tools/push-setup.sh'):
+    if 'BEGIN PRIVATE KEY' in open(os.path.join(HERE, name), encoding='utf-8').read():
+        fail.append(f'{name} 에 비밀키가 들어 있다 — 절대 커밋하면 안 된다')
+
+# 받는 쪽이 갖춰져 있는가
+if "addEventListener('push'" not in sw:
+    fail.append('sw.js 에 push 처리가 없다 — 알림이 와도 아무 일도 안 일어난다')
+if "addEventListener('notificationclick'" not in sw:
+    fail.append('sw.js 에 notificationclick 이 없다 — 눌러도 루틴이 안 열린다')
+for key in ('morning', 'evening'):
+    if f"{key}:" not in sw.split('const NOTICE')[-1][:400]:
+        fail.append(f'sw.js 의 NOTICE 에 {key} 문구가 없다')
+if 'userVisibleOnly: true' not in app:
+    fail.append('userVisibleOnly 가 없다 — 안드로이드에서 구독이 거절된다')
+if "get('routine')" not in app:
+    fail.append('앱이 ?routine= 을 읽지 않는다 — 알림을 눌러도 그 루틴이 안 열린다')
+if 'history.replaceState' not in app:
+    fail.append('?routine= 을 주소에서 지우지 않는다 — 갱신 때 루틴이 처음부터 다시 돈다')
+
+# ⚠ 시각이 두 곳에 적혀 있다. 어긋나면 조용히 안 온다
+py_times = set(re.findall(r'\((\d+),\s*(\d+)\)', send.split('SCHEDULE = [')[-1].split(']')[0]))
+sh_times = set(zip(re.findall(r'<key>Hour</key><integer>(\d+)</integer>', setup),
+                   re.findall(r'<key>Minute</key><integer>(\d+)</integer>', setup)))
+if not py_times:
+    fail.append('push-send.py 의 SCHEDULE 을 읽지 못했다')
+elif py_times != sh_times:
+    fail.append(f'보낼 시각이 두 파일에서 어긋난다 — '
+                f'push-send.py {sorted(py_times)} / push-setup.sh {sorted(sh_times)}')
+
+# 이 맥에 깔린 사본이 낡았는가. 다른 기기에는 없는 것이 정상이라 경고만 한다
+dest = os.path.expanduser('~/.routine-push/push-send.py')
+if os.path.exists(dest) and open(dest, encoding='utf-8').read() != send:
+    warn.append('~/.routine-push/push-send.py 가 저장소본과 다르다 '
+                '— tools/push-setup.sh 를 다시 돌려라')
+
+for w in warn: print('  ⚠ ' + w)
+for f in fail: print('  ' + f)
+sys.exit(1 if fail else 0)
+PY
+then
+  red "✗ 12. 정해진 시각 알림 — 조용히 실패할 자리가 생겼습니다"
+  echo
+  red "회귀 검사 실패 — 이대로 올리면 알림이 아무 소리 없이 안 옵니다."
+  exit 1
+fi
+green "✓ 12. 정해진 시각 알림 — 공개키·수신·시각 일치"
+
 echo
 green "회귀 검사 통과"
 printf '\033[33m%s\033[0m\n' "다만 소리·레이아웃·터치는 이 검사가 판정하지 못합니다 — 손으로 확인하세요."

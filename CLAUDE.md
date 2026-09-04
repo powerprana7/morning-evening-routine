@@ -37,7 +37,10 @@
 ├── tools/
 │   ├── check.sh           회귀 검사
 │   ├── make-icons.py      아이콘 생성 + 매니페스트에 지문 찍기 (D-029)
-│   └── build-mac-app.sh   맥앱 빌드 (--install 로 /Applications 에 설치)
+│   ├── build-mac-app.sh   맥앱 빌드 (--install 로 /Applications 에 설치)
+│   ├── push-send.py       정해진 시각 알림을 보낸다 — 맥에서 돈다 (D-033).
+│   │                      비밀키·등록 정보는 `~/.routine-push/` 에만 둔다
+│   └── push-setup.sh      그것을 launchd 에 건다 (7:30 · 20:30)
 └── docs/
     ├── STATUS.md          ★ 지금 상태 — 세션을 시작하면 이것부터 읽는다
     ├── UPDATES.md         갱신 이력 (언제 무엇이 바뀌었나 — 버전마다 한 칸)
@@ -121,4 +124,16 @@ grep -n "const VERSION" "$PROJ/index.html"    # 현재 버전 확인
 grep -n "tier:" "$PROJ/index.html"            # 루틴 목록과 배치 층 한눈에
 "$PROJ/tools/check.sh"                        # 회귀 검사
 "$PROJ/tools/build-mac-app.sh" --install      # 맥앱 빌드 + 설치
+
+"$PROJ/tools/push-setup.sh"                   # 알림 설치·갱신 (몇 번을 돌려도 안전)
+~/.routine-push/push-send.py status           # 알림 상태 — 등록됐나, 최근 기록
+~/.routine-push/push-send.py send --force     # 지금 바로 보내 확인
 ```
+
+**알림에서 절대 하면 안 되는 것** (D-033)
+
+- **비밀키를 저장소에 넣지 않는다.** 이 저장소만 Public 이다. `index.html` 의
+  `VAPID_PUBLIC` 은 공개되라고 있는 값이라 괜찮고, 짝인 비밀키는 맥에만 둔다
+- **열쇠를 다시 만들지 않는다.** 폰에 등록된 알림 주소가 전부 못 쓰게 된다
+- **보낼 시각을 한 파일만 고치지 않는다.** `push-send.py` 의 `SCHEDULE` 과
+  `push-setup.sh` 의 `StartCalendarInterval` 이 짝이다 (검사 12번이 붙잡는다)
