@@ -219,10 +219,15 @@ def due_now(force: bool) -> bool:
 
 
 def cmd_send(force: bool) -> int:
+    # 관제판의 「Run now」 로 불렸으면 시각을 안 보고 보낸다. hb 가 HB_MANUAL=1 을 넘긴다.
+    # 사람이 눌러 보는 것이므로 늦은 알림이 방해된다는 까닭이 맞지 않는다.
+    force = force or os.environ.get("HB_MANUAL") == "1"
     if not due_now(force):
         log(f"예정 시각이 아니라 보내지 않습니다 (지금 {datetime.now():%H:%M}, "
             f"예정 {', '.join(f'{h:02d}:{m:02d}' for h, m in SCHEDULE)}). "
             f"맥이 잠들었다 늦게 깨어난 경우입니다")
+        # 관제판에 거짓 초록(ok) 대신 skip 으로 남긴다 (hb 가 이 줄을 읽는다)
+        print(f"hb:skip 예정 시각 밖 ({datetime.now():%H:%M})", file=sys.stderr)
         return 0
 
     key = load_key()
