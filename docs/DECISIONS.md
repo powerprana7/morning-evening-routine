@@ -1201,7 +1201,7 @@ Flutter·단축어)은 여전히 전부 탈락이고, 알림 하나 때문에 �
 
 ---
 
-## D-034 · 루틴 시간을 Timeline 에 보낸다 (2026-10-23)
+### D-034 · 2026-10-23 · 루틴 시간을 Timeline 에 보낸다
 
 **결정**: 루틴을 시작하면 Timeline 서버(`timeline.icy-sun-705f.workers.dev`)에 기록 중 블록을, 마치면 끝을 보낸다. 사용자 지시 「routine 앱에서 routine 실행 정보를 timeline 앱이 자동으로 받아서 반영」.
 
