@@ -511,7 +511,7 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-10-23.1';
+const VERSION = '2026-10-23.2';
 
 /* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
    짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
@@ -1133,6 +1133,7 @@ function complete(i, skipped) {
     ms: skipped ? null : Date.now() - state.itemStart,
     skipped: skipped,
   });
+  if (!skipped) tlProgress();        // 닫힌 루틴 정리에 쓴다 (D-034)
   if (skipped) {
     buzz(20);
   } else {
@@ -1702,7 +1703,7 @@ if (notifyOK) {
        보내지 못한 것은 쌓아 뒀다가 다음에 함께 보낸다.
    ═══════════════════════════════════════════════════════════════════ */
 const TL = 'https://timeline.icy-sun-705f.workers.dev';
-const TL_KEY = 'tlKey', TL_PEND = 'tlPending', Q = 15 * 60 * 1000;
+const TL_KEY = 'tlKey', TL_PEND = 'tlPending', TL_RUN = 'tlRun', Q = 15 * 60 * 1000;
 const tlKey = () => { try { return localStorage.getItem(TL_KEY); } catch (e) { return null; } };
 const tlRound = (ms) => Math.floor((ms + Q / 2) / Q) * Q;
 function tlDay(ms) {   // 서울 날짜 (toISOString 은 UTC 라 쓰지 않는다)
@@ -1725,20 +1726,34 @@ function tlSend(block) {
     if (r.status === 401) { try { localStorage.removeItem(TL_KEY); } catch (e) { /* 무시 */ } paintTlBtn(); }
   }).catch(() => { /* 오프라인 — 다음에 */ });
 }
+/* 진행 중인 루틴을 localStorage 에도 둔다 — 도중에 앱을 그냥 닫으면 다음에 열 때 정리한다
+   { id, start, title, last: 마지막으로 항목을 끝낸 시각, done: 끝낸 항목 수(건너뛴 것 빼고) } */
+function tlSaveRun(t) { try { t ? localStorage.setItem(TL_RUN, JSON.stringify(t)) : localStorage.removeItem(TL_RUN); } catch (e) { /* 무시 */ } }
+function tlLoadRun() { try { return JSON.parse(localStorage.getItem(TL_RUN) || 'null'); } catch (e) { return null; } }
 function tlStart(title) {
   if (!tlKey()) return;
   const now = Date.now();
-  state.tl = { id: 'routine-' + now.toString(36) + Math.random().toString(36).slice(2, 8), start: now, title };
+  state.tl = { id: 'routine-' + now.toString(36) + Math.random().toString(36).slice(2, 8), start: now, title, last: now, done: 0 };
+  tlSaveRun(state.tl);
   tlSend({ id: state.tl.id, lane: 'actual', date: tlDay(now), start: now, end: null, title, updated: now, deleted: false });
+}
+function tlProgress() {
+  if (!state.tl) return;
+  state.tl.last = Date.now(); state.tl.done++;
+  tlSaveRun(state.tl);
+}
+/* 끝을 보낸다. at = 끝 시각(기본 지금) */
+function tlClose(t, keep, at) {
+  const now = Date.now();
+  const s = tlRound(t.start);
+  let e = tlRound(at || now); if (e <= s) e = s + Q;
+  tlSend({ id: t.id, lane: 'actual', date: tlDay(s), start: s, end: e, title: t.title, updated: now, deleted: !keep });
 }
 function tlEnd(keep) {
   const t = state.tl;
   if (!t) return;
-  state.tl = null;
-  const now = Date.now();
-  const s = tlRound(t.start);
-  let e = tlRound(now); if (e <= s) e = s + Q;
-  tlSend({ id: t.id, lane: 'actual', date: tlDay(s), start: s, end: e, title: t.title, updated: now, deleted: !keep });
+  state.tl = null; tlSaveRun(null);
+  tlClose(t, keep);
 }
 function paintTlBtn() { $('btnTl').textContent = tlKey() ? '⏱ Timeline 연결됨' : '⏱ Timeline'; }
 function openTlBox() {
@@ -1769,6 +1784,14 @@ $('btnTlGo').addEventListener('click', () => {
     .catch(() => { $('tlMsg').textContent = '연결하지 못했습니다 · 인터넷을 확인하세요'; });
 });
 paintTlBtn();
+/* 지난번에 도중에 닫힌 루틴 — 마지막으로 항목을 끝낸 시각에 닫는다. 끝낸 것이 없으면 지운다.
+   (앱을 열면 늘 시작 화면이라, 남아 있는 것은 모두 닫힌 루틴이다) */
+(function () {
+  const t = tlLoadRun();
+  if (!t) return;
+  tlSaveRun(null);
+  if (tlKey()) tlClose(t, t.done > 0, t.last);
+})();
 if (tlKey() && tlPending().length) tlSend(tlPending()[0]);   // 지난번에 못 보낸 것
 
 /* 알림을 눌러서 들어온 경우 그 루틴을 바로 연다.
