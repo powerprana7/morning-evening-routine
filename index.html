@@ -386,6 +386,17 @@ button {
       <button class="ghost" id="btnSound">🔔 소리 켬</button>
       <button class="ghost" id="btnNotify" hidden>⏰ 알림</button>
       <button class="ghost" id="btnEdit">✎ 루틴 편집</button>
+      <button class="ghost" id="btnTl">⏱ Timeline</button>
+    </div>
+    <!-- Timeline 연결 (D-034). 루틴을 시작·마치면 Timeline 앱에 그 시간이 기록된다 -->
+    <div class="notify-box" id="tlBox" hidden>
+      <div class="notify-msg" id="tlMsg"></div>
+      <input class="notify-cmd" id="tlCode" inputmode="numeric" maxlength="6" placeholder="6자리 코드" style="font-size:20px;text-align:center;letter-spacing:4px">
+      <div class="notify-actions">
+        <button class="ghost" id="btnTlGo">연결</button>
+        <button class="ghost" id="btnTlOff" hidden>연결 끊기</button>
+        <button class="ghost" id="btnTlClose">닫기</button>
+      </div>
     </div>
     <!-- 알림을 켠 뒤 맥에 등록할 명령이 여기에 뜬다 (D-033).
          평소에는 감춰 둔다 — 시작 화면은 루틴을 고르는 자리다 -->
@@ -500,7 +511,7 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-10-17.1';
+const VERSION = '2026-10-23.1';
 
 /* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
    짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
@@ -1093,6 +1104,7 @@ function start(key) {
   state.records = [];
   state.runStart = Date.now();
   state.itemStart = Date.now();
+  tlStart(data.label);               // Timeline 에 기록 시작 (D-034)
   show('run');
   keepAwake();
   render(false);
@@ -1249,6 +1261,7 @@ function back() {
 /* 실행 도중 시작 화면으로 나간다 (B-24).
    진행 상태는 어차피 저장하지 않으므로(SPEC) 기록을 버리고 정리만 한다. */
 function goHome() {
+  tlEnd(state.records.length > 0);   // 하나라도 했으면 남기고, 아니면 지운다 (D-034)
   releaseAwake();
   clearInterval(state.ticker);
   state.ticker = null;
@@ -1258,6 +1271,7 @@ function goHome() {
 }
 
 function finish() {
+  tlEnd(true);
   releaseAwake();
   clearInterval(state.ticker);
   state.ticker = null;
@@ -1679,6 +1693,83 @@ if (notifyOK) {
     .then(paintNotifyBtn)
     .catch(() => paintNotifyBtn(null));
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Timeline 연결 (D-034)
+       루틴을 시작하면 Timeline 의 실제 열에 「기록 중」 블록을 만들고, 마치면 끝을 넣는다.
+       Timeline 앱(맥·폰)은 이것을 다른 기록처럼 받는다 — 하던 기록이 있으면 거기서 바뀐다.
+       열쇠는 이 기기의 localStorage 에만 둔다. 이 저장소는 공개라 코드에 열쇠를 넣지 않는다.
+       보내지 못한 것은 쌓아 뒀다가 다음에 함께 보낸다.
+   ═══════════════════════════════════════════════════════════════════ */
+const TL = 'https://timeline.icy-sun-705f.workers.dev';
+const TL_KEY = 'tlKey', TL_PEND = 'tlPending', Q = 15 * 60 * 1000;
+const tlKey = () => { try { return localStorage.getItem(TL_KEY); } catch (e) { return null; } };
+const tlRound = (ms) => Math.floor((ms + Q / 2) / Q) * Q;
+function tlDay(ms) {   // 서울 날짜 (toISOString 은 UTC 라 쓰지 않는다)
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(ms));
+  const g = (t) => p.find((x) => x.type === t).value;
+  return g('year') + '-' + g('month') + '-' + g('day');
+}
+function tlPending() { try { return JSON.parse(localStorage.getItem(TL_PEND) || '[]'); } catch (e) { return []; } }
+function tlSend(block) {
+  const key = tlKey();
+  if (!key) return;
+  const pend = tlPending().filter((b) => b.id !== block.id).concat([block]);
+  try { localStorage.setItem(TL_PEND, JSON.stringify(pend)); } catch (e) { /* 무시 */ }
+  // since 를 아주 크게 — 보내기만 하고 받지는 않는다
+  fetch(TL + '/sync?since=9007199254740991', {
+    method: 'POST', headers: { 'X-Timeline-Key': key, 'X-Timeline-Device': 'routine' },
+    body: JSON.stringify({ v: 1, blocks: pend }),
+  }).then((r) => {
+    if (r.ok) { try { localStorage.setItem(TL_PEND, '[]'); } catch (e) { /* 무시 */ } }
+    if (r.status === 401) { try { localStorage.removeItem(TL_KEY); } catch (e) { /* 무시 */ } paintTlBtn(); }
+  }).catch(() => { /* 오프라인 — 다음에 */ });
+}
+function tlStart(title) {
+  if (!tlKey()) return;
+  const now = Date.now();
+  state.tl = { id: 'routine-' + now.toString(36) + Math.random().toString(36).slice(2, 8), start: now, title };
+  tlSend({ id: state.tl.id, lane: 'actual', date: tlDay(now), start: now, end: null, title, updated: now, deleted: false });
+}
+function tlEnd(keep) {
+  const t = state.tl;
+  if (!t) return;
+  state.tl = null;
+  const now = Date.now();
+  const s = tlRound(t.start);
+  let e = tlRound(now); if (e <= s) e = s + Q;
+  tlSend({ id: t.id, lane: 'actual', date: tlDay(s), start: s, end: e, title: t.title, updated: now, deleted: !keep });
+}
+function paintTlBtn() { $('btnTl').textContent = tlKey() ? '⏱ Timeline 연결됨' : '⏱ Timeline'; }
+function openTlBox() {
+  const on = !!tlKey();
+  $('tlMsg').textContent = on
+    ? '연결되어 있습니다. 루틴을 시작하면 Timeline 에 기록되고, 마치면 끝납니다.'
+    : 'Timeline 맥 앱 설정의 「Phone Pairing Code」 6자리를 넣으세요. 루틴 시간이 Timeline 에 자동으로 기록됩니다.';
+  $('tlCode').hidden = on; $('btnTlGo').hidden = on; $('btnTlOff').hidden = !on;
+  $('tlBox').hidden = false;
+}
+$('btnTl').addEventListener('click', openTlBox);
+$('btnTlClose').addEventListener('click', () => { $('tlBox').hidden = true; });
+$('btnTlOff').addEventListener('click', () => {
+  try { localStorage.removeItem(TL_KEY); } catch (e) { /* 무시 */ }
+  paintTlBtn(); $('tlBox').hidden = true;
+});
+$('btnTlGo').addEventListener('click', () => {
+  const code = $('tlCode').value.replace(/\D/g, '');
+  if (code.length !== 6) { $('tlMsg').textContent = '숫자 6자리를 넣으세요'; return; }
+  $('tlMsg').textContent = '연결 중…';
+  fetch(TL + '/pair/claim', { method: 'POST', body: JSON.stringify({ code, name: 'Routine' }) })
+    .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      if (!ok || !j.key) { $('tlMsg').textContent = '코드가 맞지 않거나 지났습니다'; return; }
+      try { localStorage.setItem(TL_KEY, j.key); } catch (e) { /* 무시 */ }
+      $('tlCode').value = ''; paintTlBtn(); openTlBox();
+    })
+    .catch(() => { $('tlMsg').textContent = '연결하지 못했습니다 · 인터넷을 확인하세요'; });
+});
+paintTlBtn();
+if (tlKey() && tlPending().length) tlSend(tlPending()[0]);   // 지난번에 못 보낸 것
 
 /* 알림을 눌러서 들어온 경우 그 루틴을 바로 연다.
 
