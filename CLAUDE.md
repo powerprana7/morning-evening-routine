@@ -31,13 +31,17 @@
 ├── .nojekyll              GitHub Pages 가 Jekyll 로 건드리지 않게
 ├── mac/
 │   ├── Routine.swift      맥앱 소스 (WKWebView + 클로드코드 다리)
+│   ├── Updater.swift      앱 안 업데이트 (note-reader 에서 가져옴 — 다른 것은 UpdateCfg 뿐, D-035)
+│   ├── VersionWindow.swift 「Routine 정보」 창 — 판 + 업데이트 확인·설치 버튼
 │   ├── icon-mac-1024.png  맥 전용 아이콘 (여백 + 둥근 모서리 — D-019)
 │   └── build.noindex/     빌드 산출물 (routine.app) — git 추적 안 함
 │                          .noindex 라 Spotlight·Alfred 가 색인하지 않는다 (D-021)
 ├── tools/
 │   ├── check.sh           회귀 검사
 │   ├── make-icons.py      아이콘 생성 + 매니페스트에 지문 찍기 (D-029)
-│   ├── build-mac-app.sh   맥앱 빌드 (--install 로 /Applications 에 설치)
+│   ├── build-mac-app.sh   맥앱 빌드 (--install 로 /Applications 에 설치. 켜져 있으면 안 덮는다)
+│   ├── publish-mac.sh     맥앱 새 판을 start.comms.ms/apps/routine 에 올린다 (D-035)
+│   ├── update-test-mac.sh 앱 안 업데이트 시험 — 설치본·실제 서버를 안 건드린다
 │   ├── push-send.py       정해진 시각 알림을 보낸다 — 맥에서 돈다 (D-033).
 │   │                      비밀키·등록 정보는 `~/.routine-push/` 에만 둔다
 │   └── push-setup.sh      그것을 launchd 에 건다 (7:30 · 20:30)
@@ -129,6 +133,8 @@ grep -n "const VERSION" "$PROJ/index.html"    # 현재 버전 확인
 grep -n "tier:" "$PROJ/index.html"            # 루틴 목록과 배치 층 한눈에
 "$PROJ/tools/check.sh"                        # 회귀 검사
 "$PROJ/tools/build-mac-app.sh" --install      # 맥앱 빌드 + 설치
+"$PROJ/tools/publish-mac.sh"                  # 맥앱 새 판 올리기 → 앱이 켤 때·「업데이트 확인…」 때 받는다
+"$PROJ/tools/update-test-mac.sh"              # 앱 안 업데이트 시험 (1분 남짓)
 
 "$PROJ/tools/push-setup.sh"                   # 알림 설치·갱신 (몇 번을 돌려도 안전)
 ~/.routine-push/push-send.py status           # 알림 상태 — 등록됐나, 최근 기록

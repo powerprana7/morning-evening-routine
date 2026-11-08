@@ -14,7 +14,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$HERE/mac/Routine.swift"
+SRC="$HERE/mac/Routine.swift"   # 본체. 같은 폴더의 Updater.swift · VersionWindow.swift 도 함께 빌드한다
 APP="$HERE/mac/build.noindex/routine.app"
 NAME="Routine"
 
@@ -34,7 +34,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 # ── 1. 실행 파일 ──────────────────────────────────────────────────────
-swiftc -O -o "$APP/Contents/MacOS/$NAME" "$SRC" \
+swiftc -O -parse-as-library -o "$APP/Contents/MacOS/$NAME" "$HERE"/mac/*.swift \
   -framework Cocoa -framework WebKit -target arm64-apple-macos13.0
 
 # ── 2. 아이콘 ────────────────────────────────────────────────────────
@@ -80,10 +80,17 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# 서명 — 앱 자체 업데이트가 zip 을 풀어 바꿔 끼운 뒤에도 서명이 살아 있어야 한다 (2026-11-08)
+codesign --force --sign - "$APP"
+
 touch "$APP"
 green "✓ 빌드 완료: $APP  (v$VERSION_NAME · $VERSION_CODE)"
 
 if [ "${1:-}" = "--install" ]; then
+  # 쓰는 중인 앱은 덮어쓰지 않는다. 끄고 다시 돌리거나, 앱 안의 「업데이트 확인…」으로 받는다
+  if pgrep -x "$NAME" >/dev/null; then
+    red "✗ Routine 이 켜져 있어 설치하지 않았습니다 (빌드본: $APP)"; exit 1
+  fi
   DEST="/Applications/routine.app"
   if [ -w /Applications ]; then
     rm -rf "$DEST"; cp -R "$APP" "$DEST"

@@ -50,6 +50,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
         buildMenu()
         load()
         NSApp.activate(ignoringOtherApps: true)
+        // 앱 자체 업데이트 (2026-11-08) — 켤 때 새 판이 있으면 그 판에 한 번만 묻는다 (mac/Updater.swift)
+        Task { await Updater.shared.checkOnLaunch() }
     }
 
     func load() {
@@ -110,13 +112,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
 
     @objc func reload() { load() }
+    @objc func showVersion() { VersionWindow.show() }
+    @objc func checkForUpdates() { Task { await Updater.shared.checkFromMenu() } }
 
     func buildMenu() {
         let main = NSMenu()
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Routine 정보", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Routine 정보", action: #selector(showVersion), keyEquivalent: "")
+        appMenu.addItem(withTitle: "업데이트 확인…", action: #selector(checkForUpdates), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "가리기", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
@@ -142,8 +147,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
     }
 }
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.regular)
-app.run()
+// 파일이 여럿이라(Updater.swift · VersionWindow.swift) 맨 위 코드 대신 @main 으로 시작한다
+@main
+enum RoutineMain {
+    @MainActor static func main() {
+        Updater.runTestIfAsked()   // --updatetest 면 창 없이 업데이트만 시험하고 끝낸다
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.setActivationPolicy(.regular)
+        app.run()
+    }
+}

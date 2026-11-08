@@ -118,6 +118,7 @@ https://powerprana7.github.io/morning-evening-routine/ · `routine.app`
 | 인증서(TLS) | ✅검증→수정 (2026-09-04) | **첫 발송이 `CERTIFICATE_VERIFY_FAILED` 로 막혔다.** python.org 판 파이썬에 CA 가 0개. `ssl_context()` 로 고쳐 `201` 을 받았다 |
 | Wake Lock (화면 꺼짐 방지) | ⚠️미검증 | 루틴 중 화면이 안 꺼지는지 |
 | 맥앱 오프라인 폴백 | ⚠️미검증 | 네트워크 끊고 `routine.app` 실행 |
+| 맥앱 앱 안 업데이트 (D-035) | ✅검증 (2026-11-08) · 화면은 ⚠️미검증 | `tools/update-test-mac.sh` 통과 — 해시가 틀리면 안 바꾸고, 맞으면 옛 판이 새 판으로 바뀌고 서명이 산다. 켤 때 묻는 창과 「Routine 정보」 창은 손으로 안 눌러 봤다 |
 
 **브라우저 자동 조작은 못 했다** — Chrome 확장이 연결돼 있지 않았고, `file://` 은
 확장이 열지도 못한다. 그래서 위 셋은 사람이 눌러야만 판정된다.
