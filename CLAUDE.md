@@ -142,3 +142,12 @@ grep -n "tier:" "$PROJ/index.html"            # 루틴 목록과 배치 층 한�
 - **열쇠를 다시 만들지 않는다.** 폰에 등록된 알림 주소가 전부 못 쓰게 된다
 - **보낼 시각을 한 파일만 고치지 않는다.** `push-send.py` 의 `SCHEDULE` 과
   `push-setup.sh` 의 `StartCalendarInterval` 이 짝이다 (검사 12번이 붙잡는다)
+
+## 맥앱 판 이름
+
+`tools/build-mac-app.sh` 가 빌드한 시각(Asia/Seoul)으로 Info.plist 에 적는다 — 이름 `26.11.08 (1247)`,
+번호는 1970 년부터 지난 분. 손으로 고치지 않는다. 웹의 `VERSION` 과는 따로다.
+
+## 업데이트 기록
+
+사용자가 알아야 할 변경을 하면 README.md 의 ## 업데이트 기록 에 날짜별로 적는다 (2026-11-08 사용자 지시).

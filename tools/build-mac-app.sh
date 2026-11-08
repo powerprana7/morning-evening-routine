@@ -24,6 +24,12 @@ red()   { printf '\033[31m%s\033[0m\n' "$1"; }
 command -v swiftc >/dev/null || { red "✗ swiftc 가 없습니다. xcode-select --install"; exit 1; }
 [ -f "$SRC" ] || { red "✗ 소스가 없습니다: $SRC"; exit 1; }
 
+# ── 판 이름 ── 빌드한 시각(서울)으로 자동으로 만든다 (2026-11-08)
+# 이름 26.11.08 (1247) · 번호 = 1970 년부터 지난 분 (계속 커지는 정수)
+NOW="$(date +%s)"
+VERSION_NAME="$(TZ=Asia/Seoul date -r "$NOW" '+%y.%m.%d (%H%M)')"
+VERSION_CODE="$((NOW / 60))"
+
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
@@ -63,8 +69,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key>         <string>com.powerprana7.routine</string>
   <key>CFBundleIconFile</key>           <string>$NAME</string>
   <key>CFBundlePackageType</key>        <string>APPL</string>
-  <key>CFBundleShortVersionString</key> <string>$(date '+%Y.%m.%d')</string>
-  <key>CFBundleVersion</key>            <string>$(date '+%Y%m%d')</string>
+  <key>CFBundleShortVersionString</key> <string>$VERSION_NAME</string>
+  <key>CFBundleVersion</key>            <string>$VERSION_CODE</string>
   <key>LSMinimumSystemVersion</key>     <string>13.0</string>
   <key>NSHighResolutionCapable</key>    <true/>
   <key>NSHumanReadableCopyright</key>   <string></string>
@@ -75,7 +81,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 touch "$APP"
-green "✓ 빌드 완료: $APP"
+green "✓ 빌드 완료: $APP  (v$VERSION_NAME · $VERSION_CODE)"
 
 if [ "${1:-}" = "--install" ]; then
   DEST="/Applications/routine.app"
