@@ -511,7 +511,7 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-11-10.1';
+const VERSION = '2026-11-11.1';
 
 /* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
    짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
@@ -1250,6 +1250,7 @@ function uncheckItem(i) {
   const k = state.records.findIndex((r) => r.i === i);
   if (k < 0) return;
   state.records.splice(k, 1);
+  tlSteps();
   state.itemStart = Date.now();
   render(false);
 }
@@ -1258,6 +1259,7 @@ function uncheckItem(i) {
 function back() {
   const last = state.records.pop();
   if (!last) return;
+  tlSteps();
   state.itemStart = Date.now();
   if (state.view === 'list') return render(false);
   state.idx = last.i;
@@ -1745,6 +1747,12 @@ function tlStart(title) {
 function tlProgress() {
   if (!state.tl) return;
   state.tl.last = Date.now(); state.tl.done++;
+  tlSteps();
+}
+/* 끝낸 단계 이름 — 건너뛴 것은 뺀다. 되돌리면 다시 맞춘다. Checks 의 Watch 항목이 이것으로 체크된다 (D-036) */
+function tlSteps() {
+  if (!state.tl) return;
+  state.tl.steps = state.records.filter((r) => !r.skipped).map((r) => r.name).slice(0, 100);
   tlSaveRun(state.tl);
 }
 /* 끝을 보낸다. at = 끝 시각(기본 지금) */
@@ -1752,7 +1760,7 @@ function tlClose(t, keep, at) {
   const now = Date.now();
   const s = tlRound(t.start);
   let e = tlRound(at || now); if (e <= s) e = s + Q;
-  tlSend({ id: t.id, lane: 'actual', date: tlDay(s), start: s, end: e, title: t.title, updated: now, deleted: !keep });
+  tlSend({ id: t.id, lane: 'actual', date: tlDay(s), start: s, end: e, title: t.title, updated: now, deleted: !keep, steps: t.steps || [] });
 }
 function tlEnd(keep) {
   const t = state.tl;
