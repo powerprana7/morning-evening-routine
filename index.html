@@ -150,6 +150,9 @@ button {
   border: 1px solid var(--line); border-radius: 12px; padding: 12px;
 }
 .notify-box[hidden] { display: none; }
+/* 시작 화면 아래 단추 묶음 — 평소 접혀 있다 (D-039) */
+.start-actions[hidden] { display: none; }
+.actions-toggle { flex: none; align-self: center; }
 .notify-msg { font-size: .84rem; line-height: 1.5; color: var(--muted); }
 .notify-cmd {
   width: 100%; box-sizing: border-box; resize: none;
@@ -382,7 +385,10 @@ button {
               aria-label="Routines">☰</button>
     </div>
     <div class="pick-list middle" id="mainPick"></div>
-    <div class="start-actions">
+    <!-- 아래 단추들은 평소 접어 둔다 (D-039). 「설정」을 누르면 펼쳐진다 -->
+    <button class="ghost actions-toggle" id="btnActions" aria-expanded="false"
+            aria-controls="startActions">설정 ▾</button>
+    <div class="start-actions" id="startActions" hidden>
       <button class="ghost" id="btnSound">🔔 소리 켬</button>
       <button class="ghost" id="btnNotify" hidden>⏰ 알림</button>
       <button class="ghost" id="btnEdit">✎ 루틴 편집</button>
@@ -530,7 +536,7 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-11-18.2';
+const VERSION = '2026-11-18.3';
 
 /* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
    짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
@@ -2009,6 +2015,13 @@ paintSoundBtn();
 applyView();          // 버튼 딱지를 비워 두지 않는다. 실제 뷰는 start() 가 건다
 paintThemeColor();    // 홈 화면 앱의 위쪽 띠 색 (D-027)
 $('ver').textContent = VERSION;
+// 아래 단추 묶음 접기·펴기 (D-039). 열 때마다 접힌 채로 시작한다
+$('btnActions').addEventListener('click', () => {
+  const box = $('startActions'), open = box.hidden;
+  box.hidden = !open;
+  $('btnActions').setAttribute('aria-expanded', String(open));
+  $('btnActions').textContent = open ? '설정 ▴' : '설정 ▾';
+});
 
 /* 편집 진입은 어느 기기에서나 보인다 (D-031).
    전에는 터치 기기에서 `btnEdit` 을 감췄다 — 안드로이드에서는 지시문을 받아 줄
