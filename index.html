@@ -530,7 +530,7 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-11-18.1';
+const VERSION = '2026-11-18.2';
 
 /* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
    짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
@@ -1605,17 +1605,17 @@ function paintSoundBtn() {
 }
 
 document.addEventListener('keydown', (e) => {
-  /* 고르기 화면들 — 엔터는 제안된 루틴, 숫자키는 위에서부터 n 번째 (맥에서 쓸 때) */
+  /* 입력칸(연결 코드 등)에 쓰는 중이면 단축키를 쓰지 않는다 (D-038) */
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  /* 고르기 화면들 — 엔터는 제안된 루틴. 숫자키로 루틴 시작은 뺐다 (D-038) */
   if (state.screen === 'start' || state.screen === 'more') {
-    const keys = routineKeys(state.screen === 'start' ? 'main' : 'more');
     if (state.screen === 'start' && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault(); start(suggestKey()); return;
     }
     if (state.screen === 'more' && e.key === 'Escape') {
       e.preventDefault(); show('start'); paintStart(); return;
     }
-    const nth = parseInt(e.key, 10);
-    if (nth >= 1 && nth <= keys.length) { e.preventDefault(); start(keys[nth - 1]); }
     return;
   }
   if (state.screen !== 'run') return;
