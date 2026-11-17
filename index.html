@@ -387,6 +387,17 @@ button {
       <button class="ghost" id="btnNotify" hidden>⏰ 알림</button>
       <button class="ghost" id="btnEdit">✎ 루틴 편집</button>
       <button class="ghost" id="btnTl">⏱ Timeline</button>
+      <button class="ghost" id="btnCk">✓ Checks</button>
+    </div>
+    <!-- Checks 연결 (D-037). 루틴 목록을 Checks 서버에서 받고, 편집한 것도 거기로 보낸다 -->
+    <div class="notify-box" id="ckBox" hidden>
+      <div class="notify-msg" id="ckMsg"></div>
+      <input class="notify-cmd" id="ckCode" inputmode="numeric" maxlength="6" placeholder="6자리 코드" style="font-size:20px;text-align:center;letter-spacing:4px">
+      <div class="notify-actions">
+        <button class="ghost" id="btnCkGo">연결</button>
+        <button class="ghost" id="btnCkOff" hidden>연결 끊기</button>
+        <button class="ghost" id="btnCkClose">닫기</button>
+      </div>
     </div>
     <!-- Timeline 연결 (D-034). 루틴을 시작·마치면 Timeline 앱에 그 시간이 기록된다 -->
     <div class="notify-box" id="tlBox" hidden>
@@ -437,6 +448,14 @@ button {
       클로드 <code>Code</code> 화면이 열린다</strong> — 거기서 맥 세션에 붙여넣어야
       맥에 닿는다. <strong>새 챗에 붙여넣으면 반영되지 않는다.</strong>
       데스크톱 브라우저에서는 복사만 된다.
+    </div>
+    <div class="edit-hint" id="editHintCk" hidden>
+      위 탭에서 고칠 루틴을 고른다. 한 줄에 항목 하나,
+      <strong>줄 순서가 곧 실행 순서</strong>다.<br>
+      <code>오일풀링 @10</code> → 10분에 알림 &nbsp;·&nbsp;
+      <code>제자리뛰기 100회 | 가자미근</code> → <code>|</code> 뒤는 작은 설명<br>
+      <strong>저장하면 Checks 서버에 들어간다</strong> — 다른 기기는 앱을 열 때 받는다.
+      지금 보는 탭 하나만 저장된다.
     </div>
 
     <div class="edit-body" id="editBody">
@@ -511,7 +530,7 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-11-12.1';
+const VERSION = '2026-11-18.1';
 
 /* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
    짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
@@ -691,7 +710,9 @@ function routineKeys(tier) {
 
 /* 지금 시각이 제안하는 루틴. 정오를 경계로 모닝/이브닝 — 어디까지나 제안이다 */
 function suggestKey() {
-  return new Date().getHours() < 12 ? 'morning' : 'evening';
+  const k = new Date().getHours() < 12 ? 'morning' : 'evening';
+  // 루틴 목록이 Checks 서버에서 오면 그 키가 없을 수 있다 (D-037)
+  return ROUTINES[k] ? k : (routineKeys('main')[0] || Object.keys(ROUTINES)[0]);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1317,6 +1338,7 @@ function finish() {
 const editor = { mode: 'morning', draft: {} };
 
 function openEditor() {
+  paintEditMode();
   editor.mode = ROUTINES[state.mode] ? state.mode : routineKeys('main')[0];
   editor.draft = {};
   Object.keys(ROUTINES).forEach((k) => {
@@ -1532,8 +1554,8 @@ $('editText').addEventListener('scroll', () => {
 $('editText').addEventListener('focus', () => $('editBody').classList.add('focused'));
 $('editText').addEventListener('blur',  () => $('editBody').classList.remove('focused'));
 window.addEventListener('resize', () => { if (state.screen === 'edit') paintGutter(); });
-$('btnEditCopy').addEventListener('click', copyEditor);
-if (inMacApp || onPhone) $('btnEditCopy').textContent = '클로드코드로 보내기';
+$('btnEditCopy').addEventListener('click', () => (ckKey() ? saveEditorToChecks() : copyEditor()));
+// 버튼 딱지는 paintEditMode 가 단다 — Checks 구역에서 처음 부르고, 편집을 열 때마다 다시 (D-037)
 $('btnEditCancel').addEventListener('click', () => {
   show('start');
   paintStart();
@@ -1807,6 +1829,147 @@ paintTlBtn();
   if (tlKey()) tlClose(t, t.done > 0, t.last);
 })();
 if (tlKey() && tlPending().length) tlSend(tlPending()[0]);   // 지난번에 못 보낸 것
+
+/* ═══════════════════════════════════════════════════════════════════
+   Checks 연결 — 루틴 목록 (D-037)
+       루틴 목록의 원본은 Checks 서버다. 연결된 기기는 열 때마다 받아서 이 기기에 사본을
+       두고(오프라인용), 편집 화면의 「Checks 에 저장」으로 서버를 고친다.
+       연결하지 않은 기기는 이 파일의 ROUTINES 를 그대로 쓴다 — 단일 파일 원칙(D-002).
+       열쇠는 이 기기의 localStorage 에만 둔다. 이 저장소는 공개다.
+   ═══════════════════════════════════════════════════════════════════ */
+const CK = 'https://checks.icy-sun-705f.workers.dev';
+const CK_KEY = 'ckKey', CK_CACHE = 'ckRoutines';
+const ckKey = () => { try { return localStorage.getItem(CK_KEY); } catch (e) { return null; } };
+const ckMeta = {};      // 루틴 id → 서버 updated. 저장할 때 base 로 보낸다
+let ckLater = null;     // 루틴을 도는 중에 받은 목록 — 시작 화면으로 돌아올 때 건다
+
+function ckApply(list) {
+  if (!Array.isArray(list) || !list.some((r) => r && r.tier === 'main' && Array.isArray(r.items))) return false;
+  Object.keys(ROUTINES).forEach((k) => { delete ROUTINES[k]; });
+  list.forEach((r) => {
+    ROUTINES[r.id] = {
+      label: r.label, short: r.short, tier: r.tier, theme: r.theme || 'auto', view: r.view,
+      items: r.items.map((x) => ({ name: x.name, note: x.note || '', minutes: x.minutes || null })),
+    };
+    ckMeta[r.id] = r.updated;
+  });
+  return true;
+}
+function ckCacheLoad() { try { return JSON.parse(localStorage.getItem(CK_CACHE) || 'null'); } catch (e) { return null; } }
+function ckCacheSave(list) { try { localStorage.setItem(CK_CACHE, JSON.stringify(list)); } catch (e) { /* 무시 */ } }
+const ckIdle = () => state.screen === 'start' || state.screen === 'more';
+function ckRepaint() {
+  paintStart();
+  if (state.screen === 'more') paintMore();
+}
+function ckDrop() {
+  try { localStorage.removeItem(CK_KEY); localStorage.removeItem(CK_CACHE); } catch (e) { /* 무시 */ }
+  paintCkBtn();
+}
+function ckRefresh() {
+  const key = ckKey();
+  if (!key) return;
+  fetch(CK + '/routines', { headers: { 'X-Checks-Key': key } })
+    .then((r) => {
+      if (r.status === 401) { ckDrop(); return null; }
+      return r.ok ? r.json() : null;
+    })
+    .then((j) => {
+      if (!j || !Array.isArray(j.routines) || !j.routines.length) return;
+      ckCacheSave(j.routines);
+      if (ckIdle()) { if (ckApply(j.routines)) ckRepaint(); } else ckLater = j.routines;
+    })
+    .catch(() => { /* 오프라인 — 사본으로 돈다 */ });
+}
+
+function paintCkBtn() { $('btnCk').textContent = ckKey() ? '✓ Checks 연결됨' : '✓ Checks'; }
+function paintEditMode() {
+  const on = !!ckKey();
+  $('editHintCk').hidden = !on;
+  $('editHintCk').previousElementSibling.hidden = on;
+  $('btnEditCopy').textContent = on ? 'Checks 에 저장'
+    : (inMacApp || onPhone) ? '클로드코드로 보내기' : '전체 복사';
+}
+function openCkBox() {
+  const on = !!ckKey();
+  $('ckMsg').textContent = on
+    ? '연결되어 있습니다. 루틴 목록을 Checks 에서 받고, 편집하면 Checks 에 저장합니다.'
+    : 'Checks 앱 Settings → Devices 의 「Pairing code」 6자리를 넣으세요. 루틴 목록을 Checks 에서 받습니다.';
+  $('ckCode').hidden = on; $('btnCkGo').hidden = on; $('btnCkOff').hidden = !on;
+  $('ckBox').hidden = false;
+}
+$('btnCk').addEventListener('click', openCkBox);
+$('btnCkClose').addEventListener('click', () => { $('ckBox').hidden = true; });
+$('btnCkOff').addEventListener('click', () => { ckDrop(); $('ckBox').hidden = true; });
+$('btnCkGo').addEventListener('click', () => {
+  const code = $('ckCode').value.replace(/\D/g, '');
+  if (code.length !== 6) { $('ckMsg').textContent = '숫자 6자리를 넣으세요'; return; }
+  $('ckMsg').textContent = '연결 중…';
+  fetch(CK + '/pair/claim', { method: 'POST', body: JSON.stringify({ code, name: 'Routine' }) })
+    .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      if (!ok || !j.key) { $('ckMsg').textContent = '코드가 맞지 않거나 지났습니다'; return; }
+      try { localStorage.setItem(CK_KEY, j.key); } catch (e) { /* 무시 */ }
+      $('ckCode').value = ''; paintCkBtn(); openCkBox();
+      ckRefresh();
+    })
+    .catch(() => { $('ckMsg').textContent = '연결하지 못했습니다 · 인터넷을 확인하세요'; });
+});
+
+/* 편집 화면에서 지금 탭 하나를 Checks 에 저장한다.
+   base 로 마지막에 받은 updated 를 보낸다 — 다른 기기가 먼저 고쳤으면 서버가 409 로 막는다. */
+function saveEditorToChecks() {
+  stashEditor();
+  const el = $('editStatus');
+  const id = editor.mode;
+  const items = parseItems(editor.draft[id]);
+  const done = (msg, warn) => {
+    el.classList.toggle('warn', !!warn);
+    el.textContent = msg;
+    if (!warn) { ping(); setTimeout(paintEditStatus, 4000); }
+  };
+  if (!items.length) { done('비어 있으면 저장하지 않습니다', true); return; }
+  el.classList.remove('warn');
+  el.textContent = '저장 중…';
+  fetch(CK + '/routines/' + encodeURIComponent(id), {
+    method: 'POST',
+    headers: { 'X-Checks-Key': ckKey(), 'X-Checks-Device': 'routine', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items, base: ckMeta[id] }),
+  })
+    .then((r) => r.json().then((j) => ({ s: r.status, j }), () => ({ s: r.status, j: {} })))
+    .then(({ s, j }) => {
+      if (s === 401) { ckDrop(); paintEditMode(); done('Checks 연결이 끊겼습니다 — 시작 화면에서 다시 연결하세요', true); return; }
+      if (s === 409) { ckRefresh(); done('다른 기기에서 먼저 고쳤습니다 — 닫고 다시 열어 새 목록에서 고치세요', true); return; }
+      if (s !== 200 || !j.routine) { done('저장하지 못했습니다 (' + (j.error || s) + ')', true); return; }
+      const r = j.routine;
+      ROUTINES[r.id].items = r.items.map((x) => ({ name: x.name, note: x.note || '', minutes: x.minutes || null }));
+      ckMeta[r.id] = r.updated;
+      const cache = ckCacheLoad();
+      if (Array.isArray(cache)) ckCacheSave(cache.map((x) => (x.id === r.id ? r : x)));
+      let msg = '저장했습니다 (' + r.items.length + '개) — 다른 기기는 앱을 열 때 받습니다';
+      if (j.renamed) msg += ' · Checks 항목 「' + j.renamed.items.join('」「') + '」 도 새 이름으로 바꿨습니다';
+      const lost = Array.isArray(j.orphaned) ? j.orphaned : [];
+      if (lost.length) {
+        msg += ' · ⚠ Checks 항목 ' + lost.map((o) => '「' + o.item + '」(' + o.step + ')').join(' ')
+             + ' 이 가리키는 단계가 없어졌습니다 — Checks 에서 고치세요';
+      }
+      done(msg, lost.length > 0);
+    })
+    .catch(() => done('인터넷이 없어 저장하지 못했습니다', true));
+}
+
+/* 시작할 때 — 연결된 기기면 사본부터 걸고, 서버에서 새로 받는다 */
+if (ckKey()) ckApply(ckCacheLoad());
+paintCkBtn();
+paintEditMode();
+ckRefresh();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') ckRefresh(); });
+/* 루틴을 마치고 시작 화면으로 돌아오면 그사이 받은 목록을 건다 */
+const paintStartBase = paintStart;
+paintStart = function () {
+  if (ckLater && ckIdle()) { const l = ckLater; ckLater = null; ckApply(l); }
+  paintStartBase();
+};
 
 /* 알림을 눌러서 들어온 경우 그 루틴을 바로 연다.
 

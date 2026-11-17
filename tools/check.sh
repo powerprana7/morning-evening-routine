@@ -121,8 +121,12 @@ has.update({
     'newTab':     "'_blank'" in js,
     # 맥앱 직통 경로(D-020)를 갈아치우지 않았는가
     'macDirect':  'messageHandlers.claudeCode.postMessage' in js,
-    # 버튼 딱지가 두 경로 다 따라오는가
-    'sendLabel':  "if (inMacApp || onPhone) $('btnEditCopy').textContent" in js,
+    # 버튼 딱지가 두 경로 다 따라오는가 (D-037 부터 paintEditMode 안 — Checks 연결이면 「Checks 에 저장」)
+    'sendLabel':  "(inMacApp || onPhone) ? '클로드코드로 보내기'" in js,
+    # Checks 에 연결된 기기는 저장, 아니면 클로드코드 경로 (D-037)
+    'ckBranch':   "ckKey() ? saveEditorToChecks() : copyEditor()" in js,
+    # 다른 기기가 먼저 고친 것을 덮지 않는다 (D-037)
+    'ckBase':     'base: ckMeta[id]' in js,
     # 지시문이 "샌드박스에 복제해 고치고 완료라고 하기"를 못박는가
     'promptWarn': 'push 까지 끝나야 반영이다' in js and '완료' in js,
 })
@@ -284,6 +288,8 @@ eq("복사가 창 열기보다 먼저",       SRC_HAS.clipFirst, true);
 eq("새 창으로 연다",                SRC_HAS.newTab,    true);
 eq("맥앱 직통 경로가 남아 있다",    SRC_HAS.macDirect, true);
 eq("버튼 딱지가 두 경로를 따른다",  SRC_HAS.sendLabel, true);
+eq("Checks 연결이면 저장, 아니면 클로드코드", SRC_HAS.ckBranch, true);
+eq("저장할 때 base 를 보낸다",      SRC_HAS.ckBase, true);
 eq("지시문이 샌드박스 작업을 막는다", SRC_HAS.promptWarn, true);
 
 /* ── 11. 버전 꼴 (D-032) ──
