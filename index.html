@@ -536,7 +536,7 @@ button {
    날짜가 바뀌면 다시 1로 간다. 번호를 빼지 않는다 — 맨 날짜와 섞이면 "하나뿐이라
    번호가 없는 것"인지 "옛 판"인지 구분되지 않는다 (D-032).
    ═══════════════════════════════════════════════════════════════════ */
-const VERSION = '2026-11-18.3';
+const VERSION = '2026-11-24.1';
 
 /* 정해진 시각 알림 — 앱 쪽 공개키 (D-033)
    짝이 되는 비밀키는 **맥의 `~/.routine-push/` 에만** 있다. 이 저장소는 Public 이라
@@ -1454,8 +1454,12 @@ function buildPrompt() {
   const body = editor.draft[key].trim();
   const count = parseItems(body).length;
   return [
-    'github.com/powerprana7/morning-evening-routine 의 index.html 에서',
-    'ROUTINES.' + key + ' 의 items 를 아래 목록으로 통째로 교체하고 push 해줘.',
+    '루틴 실행기(morning-evening-routine)의 루틴 편집기에서 복사한 지시다.',
+    '저장소: github.com/powerprana7/morning-evening-routine · 맥: /Users/mac/dev/morning-evening-routine — 먼저 CLAUDE.md 를 읽어라.',
+    'index.html 의 ROUTINES.' + key + ' 의 items 를 아래 목록으로 통째로 교체하고 push 해줘.',
+    '',
+    '⚠ ROUTINES 는 Checks 서버에 연결하지 않은 기기만 쓰는 기본 목록이다. Checks 에 연결된 기기는 목록을 Checks 서버(/routines)에서 받는다.',
+    '내 기기가 Checks 에 연결돼 있으면 이 교체는 그 기기에 반영되지 않고 Checks 쪽을 고쳐야 한다. 어느 쪽인지 분명하지 않으면 고치기 전에 물어줘.',
     '',
     '⚠ push 까지 끝나야 반영이다. 임시 폴더에 새로 clone 해서 고치면 아무 데도 안 남는다.',
     'push 를 못 하겠으면 커밋해 놓고 "완료"라고 하지 말고, 안 됐다고 분명히 말해줘.',
